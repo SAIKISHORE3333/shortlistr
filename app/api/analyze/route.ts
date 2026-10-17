@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI, Type } from "@google/genai";
+import Groq from "groq-sdk";
 
 export const maxDuration = 60;
 
@@ -73,36 +73,12 @@ function cleanAndParseJSON<T = any>(rawText: string): T {
   }
 }
 
-async function callGeminiWithFallback(ai: GoogleGenAI, contents: string, config: any) {
-  const models = ["gemini-3.8-flash"];
-  let lastError: any = null;
-
-  for (const model of models) {
-    try {
-      return await ai.models.generateContent({
-        model,
-        contents,
-        config,
-      });
-    } catch (err: any) {
-      lastError = err;
-      console.warn(`Model ${model} failed, attempting next model fallback:`, err?.message || err);
-      // Brief pause if 503 high demand
-      if (err?.message?.includes("503") || err?.status === 503) {
-        await new Promise((r) => setTimeout(r, 800));
-      }
-    }
-  }
-
-  throw lastError;
-}
-
 export async function POST(req: Request) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
-        { error: "Missing GEMINI_API_KEY in environment variables." },
+        { error: "Missing GROQ_API_KEY in environment variables. Please add GROQ_API_KEY to your .env.local file." },
         { status: 500 }
       );
     }
@@ -124,7 +100,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const ai = new GoogleGenAI({ apiKey });
+    const groq = new Groq({ apiKey });
 
     const systemInstruction = `You are a high-speed, precision ATS skill and competency parser.
 Your task is to analyze candidate resume text against a target job description and extract structured competency data.
@@ -135,7 +111,24 @@ Your task is to analyze candidate resume text against a target job description a
 3. Categorize into Hard/Technical Skills (languages, frameworks, tools, platforms) and Soft Skills (communication, leadership, cross-functional collaboration, problem-solving).
 4. Evaluate yearsExperienceMatched: true if the candidate's duration and seniority level meet the JD requirement; false otherwise.
 5. Evaluate educationMatched: true if candidate meets the baseline educational requirement (degree, relevant field, or equivalent experience); false otherwise.
-6. Provide 2-4 truth-grounded tailored STAR bullet point recommendations based on real achievements in the resume. Insert bracketed placeholders like "[Insert % or number]" if metrics are missing. Banned buzzwords: "spearheaded", "synergy", "dynamic", "thrilled to apply", "delve", "harnessing", "proven track record", "deep passion for".`;
+6. Provide 2-4 truth-grounded tailored STAR bullet point recommendations based on real achievements in the resume. Insert bracketed placeholders like "[Insert % or number]" if metrics are missing. Banned buzzwords: "spearheaded", "synergy", "dynamic", "thrilled to apply", "delve", "harnessing", "proven track record", "deep passion for".
+
+Return clean JSON matching this schema:
+{
+  "matchedHardSkills": ["string"],
+  "missingHardSkills": ["string"],
+  "matchedSoftSkills": ["string"],
+  "missingSoftSkills": ["string"],
+  "yearsExperienceMatched": boolean,
+  "educationMatched": boolean,
+  "tailoredBullets": [
+    {
+      "original": "Original resume bullet point",
+      "improved": "Truthfully tailored STAR bullet",
+      "skillTargeted": "Skill targeted"
+    }
+  ]
+}`;
 
     const userPrompt = `=== CANDIDATE RESUME ===
 ${resumeText}
@@ -143,73 +136,20 @@ ${resumeText}
 === TARGET JOB DESCRIPTION ===
 ${jobDescription}
 
-Extract the matched and missing hard/soft skills, experience alignment, education alignment, and tailored bullet suggestions as structured JSON.`;
+Extract the matched and missing hard/soft skills, experience alignment, education alignment, and tailored bullet suggestions as structured JSON now.`;
 
-    const config = {
-      systemInstruction,
-      responseMimeType: "application/json",
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: systemInstruction },
+        { role: "user", content: userPrompt },
+      ],
+      response_format: { type: "json_object" },
       temperature: 0.2,
-      maxOutputTokens: 4000,
-      thinkingConfig: { thinkingBudget: 0 },
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          matchedHardSkills: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: "Technical/hard skills present in both resume and job description",
-          },
-          missingHardSkills: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: "Technical/hard skills required by job description but missing in resume",
-          },
-          matchedSoftSkills: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: "Soft skills and interpersonal competencies present in both resume and JD",
-          },
-          missingSoftSkills: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: "Soft skills required by job description but missing in resume",
-          },
-          yearsExperienceMatched: {
-            type: Type.BOOLEAN,
-            description: "Whether candidate's experience length/seniority matches JD requirement",
-          },
-          educationMatched: {
-            type: Type.BOOLEAN,
-            description: "Whether candidate's education matches JD requirements",
-          },
-          tailoredBullets: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                original: { type: Type.STRING, description: "Original resume bullet point" },
-                improved: { type: Type.STRING, description: "Truthfully tailored STAR bullet" },
-                skillTargeted: { type: Type.STRING, description: "Skill targeted" },
-              },
-              required: ["original", "improved", "skillTargeted"],
-            },
-          },
-        },
-        required: [
-          "matchedHardSkills",
-          "missingHardSkills",
-          "matchedSoftSkills",
-          "missingSoftSkills",
-          "yearsExperienceMatched",
-          "educationMatched",
-          "tailoredBullets",
-        ],
-      },
-    };
+      max_tokens: 4096,
+    });
 
-    const response = await callGeminiWithFallback(ai, userPrompt, config);
-
-    const outputText = response.text || "{}";
+    const outputText = completion.choices[0]?.message?.content || "{}";
     const parsed = cleanAndParseJSON(outputText);
 
     const matchedHardSkills: string[] = Array.isArray(parsed.matchedHardSkills)
