@@ -19,7 +19,12 @@ import {
   Mail,
   Zap,
   RotateCcw,
-  BookOpen
+  BookOpen,
+  Cpu,
+  GraduationCap,
+  Clock,
+  Layers,
+  Wand2
 } from "lucide-react";
 
 interface TailoredBullet {
@@ -28,13 +33,27 @@ interface TailoredBullet {
   skillTargeted: string;
 }
 
+interface ScoreBreakdown {
+  hardSkillScore: number;
+  hardSkillMax: number;
+  softSkillScore: number;
+  softSkillMax: number;
+  expScore: number;
+  expMax: number;
+  eduScore: number;
+  eduMax: number;
+}
+
 interface AnalysisResult {
   atsScore: number;
-  matchedKeywords: string[];
-  missingKeywords: string[];
+  scoreBreakdown: ScoreBreakdown;
+  matchedHardSkills: string[];
+  missingHardSkills: string[];
+  matchedSoftSkills: string[];
+  missingSoftSkills: string[];
+  yearsExperienceMatched: boolean;
+  educationMatched: boolean;
   tailoredBullets: TailoredBullet[];
-  fullTailoredResumeMarkdown: string;
-  coverLetter: string;
 }
 
 const SAMPLE_RESUME = `Jane Doe
@@ -96,6 +115,14 @@ export default function ShortlistrPortal() {
   const [activeTab, setActiveTab] = useState<"ats" | "cv" | "cover">("ats");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
+  // On-demand document states
+  const [generatedCv, setGeneratedCv] = useState<string | null>(null);
+  const [generatingCv, setGeneratingCv] = useState(false);
+  const [generatedCover, setGeneratedCover] = useState<string | null>(null);
+  const [generatingCover, setGeneratingCover] = useState(false);
+  const [docError, setDocError] = useState<string | null>(null);
+
+  // Fast Initial Deterministic Audit
   const handleAnalyze = async () => {
     if (!resumeText.trim() || !jobDescription.trim()) {
       setError("Please provide both your resume and the target job description.");
@@ -104,6 +131,7 @@ export default function ShortlistrPortal() {
 
     setLoading(true);
     setError(null);
+    setDocError(null);
 
     try {
       const res = await fetch("/api/analyze", {
@@ -118,6 +146,9 @@ export default function ShortlistrPortal() {
       }
 
       setResult(data);
+      // Invalidate previously cached docs if analyzing a new application
+      setGeneratedCv(null);
+      setGeneratedCover(null);
       setActiveTab("ats");
     } catch (err: any) {
       setError(err?.message || "Failed to communicate with analysis engine.");
@@ -126,17 +157,57 @@ export default function ShortlistrPortal() {
     }
   };
 
+  // On-demand document generator
+  const handleGenerateDoc = async (docType: "cv" | "cover") => {
+    if (!resumeText.trim() || !jobDescription.trim()) {
+      setDocError("Resume and job description are required to generate documents.");
+      return;
+    }
+
+    setDocError(null);
+    if (docType === "cv") setGeneratingCv(true);
+    if (docType === "cover") setGeneratingCover(true);
+
+    try {
+      const res = await fetch("/api/generate-docs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resumeText, jobDescription, docType }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `Failed to generate ${docType.toUpperCase()}`);
+      }
+
+      if (docType === "cv") {
+        setGeneratedCv(data.content);
+      } else {
+        setGeneratedCover(data.content);
+      }
+    } catch (err: any) {
+      setDocError(err?.message || `Failed to generate ${docType.toUpperCase()}`);
+    } finally {
+      if (docType === "cv") setGeneratingCv(false);
+      if (docType === "cover") setGeneratingCover(false);
+    }
+  };
+
   const handleLoadSample = () => {
     setResumeText(SAMPLE_RESUME);
     setJobDescription(SAMPLE_JOB);
     setError(null);
+    setDocError(null);
   };
 
   const handleReset = () => {
     setResumeText("");
     setJobDescription("");
     setResult(null);
+    setGeneratedCv(null);
+    setGeneratedCover(null);
     setError(null);
+    setDocError(null);
   };
 
   const copyToClipboard = (text: string, key: string) => {
@@ -173,11 +244,11 @@ export default function ShortlistrPortal() {
                 Shortlistr<span className="text-indigo-400">.ai</span>
               </h1>
               <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                v2.5
+                Hybrid ATS Engine
               </span>
             </div>
             <p className="text-xs text-slate-400 hidden sm:block">
-              Factual ATS Compatibility & Executive Resume Tailoring
+              Deterministic ATS Scoring + On-Demand Grounded Generation
             </p>
           </div>
         </div>
@@ -301,7 +372,7 @@ export default function ShortlistrPortal() {
             {loading ? (
               <>
                 <RefreshCw className="w-5 h-5 animate-spin text-white" />
-                <span>Auditing ATS & Tailoring Application...</span>
+                <span>Scanning Skills & Computing ATS Match...</span>
               </>
             ) : (
               <>
@@ -360,6 +431,9 @@ export default function ShortlistrPortal() {
             >
               <FileCode className="w-4 h-4 text-emerald-400" />
               <span>Tailored CV</span>
+              {generatedCv && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              )}
             </button>
 
             <button
@@ -373,31 +447,45 @@ export default function ShortlistrPortal() {
             >
               <Mail className="w-4 h-4 text-violet-400" />
               <span>Cover Letter</span>
+              {generatedCover && (
+                <span className="w-2 h-2 rounded-full bg-violet-400" />
+              )}
             </button>
           </div>
 
           {/* Results Container */}
           <div className="flex-1 p-5 sm:p-6 overflow-y-auto max-h-[820px]">
+            {/* Global Document Error Banner */}
+            {docError && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{docError}</span>
+              </div>
+            )}
+
             {/* Empty State */}
             {!result && !loading && (
               <div className="h-full min-h-[460px] flex flex-col items-center justify-center text-center p-8">
                 <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 shadow-inner">
                   <FileText className="w-8 h-8 stroke-[1.5]" />
                 </div>
-                <h3 className="text-base font-semibold text-white">Application Ready for Audit</h3>
+                <h3 className="text-base font-semibold text-white">Commercial-Grade ATS Audit</h3>
                 <p className="text-xs sm:text-sm text-slate-400 max-w-md mt-1.5 leading-relaxed">
                   Provide your resume and target job description on the left, then click{" "}
-                  <strong className="text-indigo-300">Analyze & Match Application</strong> to unlock keyword diagnostics, tailored STAR achievements, and an aligned cover letter.
+                  <strong className="text-indigo-300">Analyze & Match Application</strong> to trigger deterministic mathematical scoring, skill gap analysis, and instant STAR revisions.
                 </p>
                 <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500">
                   <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
-                    ATS Keyword Score
+                    Hard Skills (50%)
                   </span>
                   <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
-                    Truth-Tailored STAR Bullets
+                    Experience & Title (20%)
                   </span>
                   <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
-                    3-Paragraph Human Cover Letter
+                    Soft Competencies (15%)
+                  </span>
+                  <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
+                    Education Alignment (15%)
                   </span>
                 </div>
               </div>
@@ -412,9 +500,9 @@ export default function ShortlistrPortal() {
                     <Sparkles className="w-6 h-6 text-indigo-400 animate-pulse" />
                   </div>
                 </div>
-                <h3 className="text-base font-semibold text-white">Analyzing Qualifications & Fit</h3>
+                <h3 className="text-base font-semibold text-white">Parsing Competencies & Calculating ATS Match</h3>
                 <p className="text-xs text-slate-400 max-w-sm mt-1.5 leading-relaxed">
-                  Extracting JD keywords, cross-referencing your experience, and crafting truth-grounded improvements...
+                  Running high-speed skill extraction and computing mathematical score breakdown...
                 </p>
               </div>
             )}
@@ -428,7 +516,7 @@ export default function ShortlistrPortal() {
                     <div className="flex items-center gap-2">
                       <TrendingUp className="w-4 h-4 text-indigo-400" />
                       <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                        ATS Match Rating
+                        Deterministic ATS Match Score
                       </span>
                     </div>
                     <div className="flex items-baseline gap-3">
@@ -444,13 +532,11 @@ export default function ShortlistrPortal() {
                           ? "High Compatibility"
                           : result.atsScore >= 50
                           ? "Moderate Alignment"
-                          : "Low Alignment"}
+                          : "Critical Gaps Detected"}
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 max-w-md">
-                      {result.atsScore >= 75
-                        ? "Your background strongly addresses key competencies specified in the job posting."
-                        : "Key competencies from the job description are absent from your resume. Review missing skills below."}
+                      Computed mathematically from hard skills, soft skills, seniority length, and educational alignment.
                     </p>
                   </div>
 
@@ -485,56 +571,207 @@ export default function ShortlistrPortal() {
                   </div>
                 </div>
 
-                {/* Keyword Pills: Matched & Missing */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Matched Keywords */}
-                  <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 flex flex-col">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        Matched Competencies ({result.matchedKeywords.length})
-                      </h4>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {result.matchedKeywords.length > 0 ? (
-                        result.matchedKeywords.map((kw, idx) => (
-                          <span
-                            key={idx}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
-                          >
-                            <Check className="w-3 h-3 text-emerald-400" />
-                            {kw}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-xs text-slate-500 italic">No direct keyword overlap found.</span>
-                      )}
-                    </div>
+                {/* Score Breakdown Meter */}
+                <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-indigo-400" />
+                      ATS Scoring Breakdown Meter
+                    </h4>
+                    <span className="text-[11px] text-slate-500">Weighted Commercial Model</span>
                   </div>
 
-                  {/* Missing Keywords */}
-                  <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 flex flex-col">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
-                        <AlertCircle className="w-4 h-4 text-rose-400" />
-                        Skill Gaps ({result.missingKeywords.length})
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Hard Skills (50%) */}
+                    <div className="space-y-1.5 bg-slate-900/60 p-3 rounded-xl border border-slate-800/60">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-300 flex items-center gap-1.5 font-medium">
+                          <Cpu className="w-3.5 h-3.5 text-indigo-400" /> Hard Technical Skills (50%)
+                        </span>
+                        <span className="font-semibold text-white">
+                          {result.scoreBreakdown.hardSkillScore} / {result.scoreBreakdown.hardSkillMax} pts
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div
+                          className="bg-indigo-500 h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${(result.scoreBreakdown.hardSkillScore / result.scoreBreakdown.hardSkillMax) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Experience Match (20%) */}
+                    <div className="space-y-1.5 bg-slate-900/60 p-3 rounded-xl border border-slate-800/60">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-300 flex items-center gap-1.5 font-medium">
+                          <Clock className="w-3.5 h-3.5 text-emerald-400" /> Experience & Seniority (20%)
+                        </span>
+                        <span className="font-semibold text-white">
+                          {result.scoreBreakdown.expScore} / {result.scoreBreakdown.expMax} pts
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            result.yearsExperienceMatched ? "bg-emerald-500" : "bg-amber-500"
+                          }`}
+                          style={{
+                            width: `${(result.scoreBreakdown.expScore / result.scoreBreakdown.expMax) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Soft Skills (15%) */}
+                    <div className="space-y-1.5 bg-slate-900/60 p-3 rounded-xl border border-slate-800/60">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-300 flex items-center gap-1.5 font-medium">
+                          <Sparkles className="w-3.5 h-3.5 text-violet-400" /> Soft Skills & Traits (15%)
+                        </span>
+                        <span className="font-semibold text-white">
+                          {result.scoreBreakdown.softSkillScore} / {result.scoreBreakdown.softSkillMax} pts
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div
+                          className="bg-violet-500 h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${(result.scoreBreakdown.softSkillScore / result.scoreBreakdown.softSkillMax) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Education Alignment (15%) */}
+                    <div className="space-y-1.5 bg-slate-900/60 p-3 rounded-xl border border-slate-800/60">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-300 flex items-center gap-1.5 font-medium">
+                          <GraduationCap className="w-3.5 h-3.5 text-sky-400" /> Education Alignment (15%)
+                        </span>
+                        <span className="font-semibold text-white">
+                          {result.scoreBreakdown.eduScore} / {result.scoreBreakdown.eduMax} pts
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            result.educationMatched ? "bg-sky-500" : "bg-amber-500"
+                          }`}
+                          style={{
+                            width: `${(result.scoreBreakdown.eduScore / result.scoreBreakdown.eduMax) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Skill Chips: Matched vs Missing */}
+                <div className="space-y-4">
+                  {/* Matched Skills */}
+                  <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 flex flex-col space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        Matched Competencies ({result.matchedHardSkills.length + result.matchedSoftSkills.length})
                       </h4>
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {result.missingKeywords.length > 0 ? (
-                        result.missingKeywords.map((kw, idx) => (
-                          <span
-                            key={idx}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-rose-500/10 text-rose-300 border border-rose-500/20"
-                          >
-                            <AlertCircle className="w-3 h-3 text-rose-400" />
-                            {kw}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-xs text-emerald-400 font-medium">All key JD requirements addressed!</span>
-                      )}
+
+                    {/* Hard Skills */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                        Hard & Technical Skills
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {result.matchedHardSkills.length > 0 ? (
+                          result.matchedHardSkills.map((kw, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+                            >
+                              <Check className="w-3 h-3 text-emerald-400" />
+                              {kw}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-slate-500 italic">No direct hard skills matched.</span>
+                        )}
+                      </div>
                     </div>
+
+                    {/* Soft Skills */}
+                    {result.matchedSoftSkills.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                          Soft Skills & Leadership
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {result.matchedSoftSkills.map((kw, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-teal-500/10 text-teal-300 border border-teal-500/20"
+                            >
+                              <Check className="w-3 h-3 text-teal-400" />
+                              {kw}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Missing Skills / Gaps */}
+                  <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 flex flex-col space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+                        <AlertCircle className="w-4 h-4 text-rose-400" />
+                        Skill Gaps ({result.missingHardSkills.length + result.missingSoftSkills.length})
+                      </h4>
+                    </div>
+
+                    {/* Missing Hard Skills */}
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                        Missing Technical Requirements
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {result.missingHardSkills.length > 0 ? (
+                          result.missingHardSkills.map((kw, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-rose-500/10 text-rose-300 border border-rose-500/20"
+                            >
+                              <AlertCircle className="w-3 h-3 text-rose-400" />
+                              {kw}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-emerald-400 font-medium">All technical requirements present!</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Missing Soft Skills */}
+                    {result.missingSoftSkills.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                          Missing Soft Skills
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {result.missingSoftSkills.map((kw, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20"
+                            >
+                              <AlertCircle className="w-3 h-3 text-amber-400" />
+                              {kw}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -603,67 +840,163 @@ export default function ShortlistrPortal() {
               </div>
             )}
 
-            {/* TAB 2: Tailored CV */}
-            {result && !loading && activeTab === "cv" && (
+            {/* TAB 2: Tailored CV (On-Demand Generation) */}
+            {activeTab === "cv" && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-slate-400">
-                    Full tailored resume markdown. Grounded in your real experience.
-                  </div>
-                  <button
-                    onClick={() => copyToClipboard(result.fullTailoredResumeMarkdown, "cv")}
-                    type="button"
-                    className="flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg transition font-medium cursor-pointer shadow-sm"
-                  >
-                    {copiedKey === "cv" ? (
-                      <>
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Copied Markdown!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy Markdown</span>
-                      </>
+                {!generatedCv ? (
+                  <div className="h-full min-h-[380px] flex flex-col items-center justify-center text-center p-8 bg-slate-950/40 border border-slate-800/80 rounded-2xl">
+                    <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-3.5">
+                      <FileCode className="w-7 h-7 stroke-[1.5]" />
+                    </div>
+                    <h3 className="text-base font-semibold text-white">Full Tailored Resume</h3>
+                    <p className="text-xs sm:text-sm text-slate-400 max-w-md mt-1.5 leading-relaxed">
+                      Generate a full, customized Markdown resume aligned with the target job description while strictly adhering to your actual career background.
+                    </p>
+                    <button
+                      onClick={() => handleGenerateDoc("cv")}
+                      disabled={generatingCv || !resumeText.trim() || !jobDescription.trim()}
+                      type="button"
+                      className="mt-5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 disabled:opacity-50 flex items-center gap-2 transition cursor-pointer"
+                    >
+                      {generatingCv ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Generating Tailored Resume...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="w-4 h-4" />
+                          <span>Generate Tailored Resume</span>
+                        </>
+                      )}
+                    </button>
+                    {!resumeText.trim() && (
+                      <span className="text-[11px] text-amber-400/80 mt-2">
+                        * Please paste resume and job description first
+                      </span>
                     )}
-                  </button>
-                </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-slate-400">
+                        Full tailored resume markdown. Grounded in your real experience.
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleGenerateDoc("cv")}
+                          disabled={generatingCv}
+                          type="button"
+                          className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg transition font-medium cursor-pointer"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${generatingCv ? "animate-spin" : ""}`} />
+                          <span>Regenerate</span>
+                        </button>
+                        <button
+                          onClick={() => copyToClipboard(generatedCv, "cv")}
+                          type="button"
+                          className="flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg transition font-medium cursor-pointer shadow-sm"
+                        >
+                          {copiedKey === "cv" ? (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Copied Markdown!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copy Markdown</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
 
-                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 sm:p-6 text-slate-200 font-mono text-xs sm:text-sm leading-relaxed whitespace-pre-wrap selection:bg-indigo-600/40 overflow-x-auto shadow-inner">
-                  {result.fullTailoredResumeMarkdown}
-                </div>
+                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 sm:p-6 text-slate-200 font-mono text-xs sm:text-sm leading-relaxed whitespace-pre-wrap selection:bg-indigo-600/40 overflow-x-auto shadow-inner">
+                      {generatedCv}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* TAB 3: Cover Letter */}
-            {result && !loading && activeTab === "cover" && (
+            {/* TAB 3: Cover Letter (On-Demand Generation) */}
+            {activeTab === "cover" && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs text-slate-400">
-                    Concise 3-paragraph letter written with natural human tone and zero banned buzzwords.
-                  </div>
-                  <button
-                    onClick={() => copyToClipboard(result.coverLetter, "cover")}
-                    type="button"
-                    className="flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg transition font-medium cursor-pointer shadow-sm"
-                  >
-                    {copiedKey === "cover" ? (
-                      <>
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Copied Letter!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Copy Letter</span>
-                      </>
+                {!generatedCover ? (
+                  <div className="h-full min-h-[380px] flex flex-col items-center justify-center text-center p-8 bg-slate-950/40 border border-slate-800/80 rounded-2xl">
+                    <div className="w-14 h-14 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 mb-3.5">
+                      <Mail className="w-7 h-7 stroke-[1.5]" />
+                    </div>
+                    <h3 className="text-base font-semibold text-white">Truth-Grounded Cover Letter</h3>
+                    <p className="text-xs sm:text-sm text-slate-400 max-w-md mt-1.5 leading-relaxed">
+                      Draft a natural, 3-paragraph conversational cover letter specifically highlighting qualifications for this role with zero banned buzzwords.
+                    </p>
+                    <button
+                      onClick={() => handleGenerateDoc("cover")}
+                      disabled={generatingCover || !resumeText.trim() || !jobDescription.trim()}
+                      type="button"
+                      className="mt-5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-600/20 disabled:opacity-50 flex items-center gap-2 transition cursor-pointer"
+                    >
+                      {generatingCover ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Drafting Cover Letter...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="w-4 h-4" />
+                          <span>Draft Grounded Cover Letter</span>
+                        </>
+                      )}
+                    </button>
+                    {!resumeText.trim() && (
+                      <span className="text-[11px] text-amber-400/80 mt-2">
+                        * Please paste resume and job description first
+                      </span>
                     )}
-                  </button>
-                </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-slate-400">
+                        Concise 3-paragraph letter written with natural human tone and zero banned buzzwords.
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleGenerateDoc("cover")}
+                          disabled={generatingCover}
+                          type="button"
+                          className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg transition font-medium cursor-pointer"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${generatingCover ? "animate-spin" : ""}`} />
+                          <span>Regenerate</span>
+                        </button>
+                        <button
+                          onClick={() => copyToClipboard(generatedCover, "cover")}
+                          type="button"
+                          className="flex items-center gap-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded-lg transition font-medium cursor-pointer shadow-sm"
+                        >
+                          {copiedKey === "cover" ? (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Copied Letter!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copy Letter</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
 
-                <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-6 sm:p-8 text-slate-100 text-sm leading-relaxed whitespace-pre-line font-sans shadow-inner">
-                  {result.coverLetter}
-                </div>
+                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-6 sm:p-8 text-slate-100 text-sm leading-relaxed whitespace-pre-line font-sans shadow-inner">
+                      {generatedCover}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
