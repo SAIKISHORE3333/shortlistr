@@ -24,7 +24,10 @@ import {
   GraduationCap,
   Clock,
   Layers,
-  Wand2
+  Wand2,
+  Edit3,
+  Download,
+  LayoutTemplate
 } from "lucide-react";
 
 interface TailoredBullet {
@@ -55,6 +58,39 @@ interface AnalysisResult {
   educationMatched: boolean;
   tailoredBullets: TailoredBullet[];
 }
+
+interface SkillCategory {
+  category: string;
+  items: string[];
+}
+
+interface ExperienceItem {
+  role: string;
+  company: string;
+  location: string;
+  period: string;
+  bullets: string[];
+}
+
+interface EducationItem {
+  degree: string;
+  institution: string;
+  location: string;
+  period: string;
+  details?: string;
+}
+
+interface ResumeData {
+  name: string;
+  contactInfo: string;
+  summary: string;
+  skills: SkillCategory[];
+  experience: ExperienceItem[];
+  education: EducationItem[];
+  markdown?: string;
+}
+
+type TemplateId = "ivy" | "tech" | "executive";
 
 const SAMPLE_RESUME = `Jane Doe
 Senior Full-Stack Engineer | Austin, TX | jane.doe@email.com | (512) 555-0199
@@ -115,7 +151,9 @@ export default function ShortlistrPortal() {
   const [activeTab, setActiveTab] = useState<"ats" | "cv" | "cover">("ats");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // On-demand document states
+  // Document Studio State
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>("ivy");
+  const [resumeData, setResumeData] = useState<ResumeData | null>(null);
   const [generatedCv, setGeneratedCv] = useState<string | null>(null);
   const [generatingCv, setGeneratingCv] = useState(false);
   const [generatedCover, setGeneratedCover] = useState<string | null>(null);
@@ -146,7 +184,8 @@ export default function ShortlistrPortal() {
       }
 
       setResult(data);
-      // Invalidate previously cached docs if analyzing a new application
+      // Invalidate previously cached documents when analyzing a fresh job application
+      setResumeData(null);
       setGeneratedCv(null);
       setGeneratedCover(null);
       setActiveTab("ats");
@@ -157,7 +196,7 @@ export default function ShortlistrPortal() {
     }
   };
 
-  // On-demand document generator
+  // On-Demand 2-Pass Generation for CV and Cover Letter
   const handleGenerateDoc = async (docType: "cv" | "cover") => {
     if (!resumeText.trim() || !jobDescription.trim()) {
       setDocError("Resume and job description are required to generate documents.");
@@ -181,9 +220,23 @@ export default function ShortlistrPortal() {
       }
 
       if (docType === "cv") {
-        setGeneratedCv(data.content);
+        setGeneratedCv(data.content || "");
+        if (data.resumeData) {
+          setResumeData(data.resumeData);
+        } else {
+          // Fallback basic structure if markdown only
+          setResumeData({
+            name: "Candidate",
+            contactInfo: "Email | Phone | Location",
+            summary: "Tailored Professional Summary",
+            skills: [],
+            experience: [],
+            education: [],
+            markdown: data.content,
+          });
+        }
       } else {
-        setGeneratedCover(data.content);
+        setGeneratedCover(data.content || data.coverLetter || "");
       }
     } catch (err: any) {
       setDocError(err?.message || `Failed to generate ${docType.toUpperCase()}`);
@@ -204,6 +257,7 @@ export default function ShortlistrPortal() {
     setResumeText("");
     setJobDescription("");
     setResult(null);
+    setResumeData(null);
     setGeneratedCv(null);
     setGeneratedCover(null);
     setError(null);
@@ -216,6 +270,10 @@ export default function ShortlistrPortal() {
     setTimeout(() => {
       setCopiedKey((prev) => (prev === key ? null : prev));
     }, 2000);
+  };
+
+  const handlePrintPDF = () => {
+    window.print();
   };
 
   const getScoreColor = (score: number) => {
@@ -232,8 +290,8 @@ export default function ShortlistrPortal() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-600/30">
-      {/* Top Navigation */}
-      <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur sticky top-0 z-20 px-4 sm:px-6 py-3.5 flex items-center justify-between">
+      {/* Top Navigation (Hidden in Print) */}
+      <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur sticky top-0 z-20 px-4 sm:px-6 py-3.5 flex items-center justify-between print:hidden">
         <div className="flex items-center gap-3">
           <div className="bg-gradient-to-tr from-indigo-600 to-violet-500 p-2 rounded-xl text-white shadow-lg shadow-indigo-600/20 flex items-center justify-center">
             <Sparkles className="w-5 h-5" />
@@ -244,11 +302,11 @@ export default function ShortlistrPortal() {
                 Shortlistr<span className="text-indigo-400">.ai</span>
               </h1>
               <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                Hybrid ATS Engine
+                All-in-One Studio
               </span>
             </div>
             <p className="text-xs text-slate-400 hidden sm:block">
-              Deterministic ATS Scoring + On-Demand Grounded Generation
+              Hybrid ATS Scanner + 2-Pass Resume Studio & Multi-Template Print Engine
             </p>
           </div>
         </div>
@@ -281,23 +339,24 @@ export default function ShortlistrPortal() {
             </button>
           )}
 
-          {result && (
+          {(resumeData || generatedCover) && (
             <button
-              onClick={() => window.print()}
+              onClick={handlePrintPDF}
               type="button"
-              className="flex items-center gap-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer"
+              id="global-export-btn"
+              className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-600/20 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer active:scale-95"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Export</span>
+              <Download className="w-3.5 h-3.5" />
+              <span>Export to PDF</span>
             </button>
           )}
         </div>
       </header>
 
       {/* Main Split Layout */}
-      <main className="flex-1 max-w-[1600px] w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Input Form (5 cols on large screens) */}
-        <section className="lg:col-span-5 flex flex-col gap-4">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 print:p-0 print:m-0 print:block">
+        {/* Left Column: Input Form (Hidden in Print) */}
+        <section className="lg:col-span-5 flex flex-col gap-4 print:hidden">
           {error && (
             <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
@@ -392,10 +451,10 @@ export default function ShortlistrPortal() {
           </div>
         </section>
 
-        {/* Right Column: Output Tabs & Insights (7 cols on large screens) */}
-        <section className="lg:col-span-7 bg-slate-900/70 border border-slate-800/90 rounded-2xl flex flex-col overflow-hidden shadow-sm backdrop-blur">
-          {/* Tab Navigation */}
-          <div className="flex border-b border-slate-800 bg-slate-950/60 px-4 pt-3 gap-2 overflow-x-auto">
+        {/* Right Column: Output Tabs & Resume Studio */}
+        <section className="lg:col-span-7 bg-slate-900/70 border border-slate-800/90 rounded-2xl flex flex-col overflow-hidden shadow-sm backdrop-blur print:border-none print:bg-white print:p-0 print:m-0 print:shadow-none">
+          {/* Tab Navigation (Hidden in Print) */}
+          <div className="flex border-b border-slate-800 bg-slate-950/60 px-4 pt-3 gap-2 overflow-x-auto print:hidden">
             <button
               onClick={() => setActiveTab("ats")}
               type="button"
@@ -430,9 +489,9 @@ export default function ShortlistrPortal() {
               }`}
             >
               <FileCode className="w-4 h-4 text-emerald-400" />
-              <span>Tailored CV</span>
-              {generatedCv && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span>Tailored CV Studio</span>
+              {resumeData && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               )}
             </button>
 
@@ -446,7 +505,7 @@ export default function ShortlistrPortal() {
               }`}
             >
               <Mail className="w-4 h-4 text-violet-400" />
-              <span>Cover Letter</span>
+              <span>Cover Letter Studio</span>
               {generatedCover && (
                 <span className="w-2 h-2 rounded-full bg-violet-400" />
               )}
@@ -454,46 +513,49 @@ export default function ShortlistrPortal() {
           </div>
 
           {/* Results Container */}
-          <div className="flex-1 p-5 sm:p-6 overflow-y-auto max-h-[820px]">
-            {/* Global Document Error Banner */}
+          <div className="flex-1 p-5 sm:p-6 overflow-y-auto max-h-[860px] print:p-0 print:m-0 print:max-h-none print:overflow-visible">
+            {/* Document Error Banner (Hidden in Print) */}
             {docError && (
-              <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+              <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2 print:hidden">
                 <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
                 <span>{docError}</span>
               </div>
             )}
 
-            {/* Empty State */}
+            {/* Empty State (Hidden in Print) */}
             {!result && !loading && (
-              <div className="h-full min-h-[460px] flex flex-col items-center justify-center text-center p-8">
+              <div className="h-full min-h-[460px] flex flex-col items-center justify-center text-center p-8 print:hidden">
                 <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 shadow-inner">
                   <FileText className="w-8 h-8 stroke-[1.5]" />
                 </div>
-                <h3 className="text-base font-semibold text-white">Commercial-Grade ATS Audit</h3>
+                <h3 className="text-base font-semibold text-white">Commercial-Grade ATS Studio</h3>
                 <p className="text-xs sm:text-sm text-slate-400 max-w-md mt-1.5 leading-relaxed">
                   Provide your resume and target job description on the left, then click{" "}
-                  <strong className="text-indigo-300">Analyze & Match Application</strong> to trigger deterministic mathematical scoring, skill gap analysis, and instant STAR revisions.
+                  <strong className="text-indigo-300">Analyze & Match Application</strong> to trigger deterministic mathematical scoring, skill gap analysis, and interactive in-portal resume styling.
                 </p>
                 <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500">
                   <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
-                    Hard Skills (50%)
+                    Deterministic Scoring
                   </span>
                   <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
-                    Experience & Title (20%)
+                    2-Pass Meta-Architect AI
                   </span>
                   <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
-                    Soft Competencies (15%)
+                    3 In-Portal Templates
                   </span>
                   <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
-                    Education Alignment (15%)
+                    Direct In-Place Editing
+                  </span>
+                  <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
+                    Clean PDF Export Engine
                   </span>
                 </div>
               </div>
             )}
 
-            {/* Loading State */}
+            {/* Loading State (Hidden in Print) */}
             {loading && (
-              <div className="h-full min-h-[460px] flex flex-col items-center justify-center text-center p-8">
+              <div className="h-full min-h-[460px] flex flex-col items-center justify-center text-center p-8 print:hidden">
                 <div className="relative mb-5">
                   <div className="w-16 h-16 rounded-full border-4 border-slate-800 border-t-indigo-500 animate-spin" />
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -507,9 +569,9 @@ export default function ShortlistrPortal() {
               </div>
             )}
 
-            {/* TAB 1: ATS Diagnostics */}
+            {/* TAB 1: ATS Diagnostics (Hidden in Print) */}
             {result && !loading && activeTab === "ats" && (
-              <div className="space-y-6">
+              <div className="space-y-6 print:hidden">
                 {/* Score & Health Banner */}
                 <div className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
                   <div className="space-y-1">
@@ -840,28 +902,29 @@ export default function ShortlistrPortal() {
               </div>
             )}
 
-            {/* TAB 2: Tailored CV (On-Demand Generation) */}
+            {/* TAB 2: Tailored CV Studio (Interactive Multi-Template Engine) */}
             {activeTab === "cv" && (
               <div className="space-y-4">
-                {!generatedCv ? (
-                  <div className="h-full min-h-[380px] flex flex-col items-center justify-center text-center p-8 bg-slate-950/40 border border-slate-800/80 rounded-2xl">
+                {!resumeData ? (
+                  <div className="h-full min-h-[380px] flex flex-col items-center justify-center text-center p-8 bg-slate-950/40 border border-slate-800/80 rounded-2xl print:hidden">
                     <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-3.5">
                       <FileCode className="w-7 h-7 stroke-[1.5]" />
                     </div>
-                    <h3 className="text-base font-semibold text-white">Full Tailored Resume</h3>
+                    <h3 className="text-base font-semibold text-white">All-in-One Tailored Resume Studio</h3>
                     <p className="text-xs sm:text-sm text-slate-400 max-w-md mt-1.5 leading-relaxed">
-                      Generate a full, customized Markdown resume aligned with the target job description while strictly adhering to your actual career background.
+                      Generate a structured, truth-grounded resume powered by our 2-Pass Meta-Architect AI. Preview and switch between 3 commercial ATS layouts in real-time.
                     </p>
                     <button
                       onClick={() => handleGenerateDoc("cv")}
                       disabled={generatingCv || !resumeText.trim() || !jobDescription.trim()}
                       type="button"
+                      id="generate-cv-btn"
                       className="mt-5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 disabled:opacity-50 flex items-center gap-2 transition cursor-pointer"
                     >
                       {generatingCv ? (
                         <>
                           <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>Generating Tailored Resume...</span>
+                          <span>Architecting 2-Pass Tailored CV...</span>
                         </>
                       ) : (
                         <>
@@ -872,35 +935,75 @@ export default function ShortlistrPortal() {
                     </button>
                     {!resumeText.trim() && (
                       <span className="text-[11px] text-amber-400/80 mt-2">
-                        * Please paste resume and job description first
+                        * Please paste resume and job description on the left first
                       </span>
                     )}
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs text-slate-400">
-                        Full tailored resume markdown. Grounded in your real experience.
-                      </div>
-                      <div className="flex items-center gap-2">
+                    {/* Control Bar: Template Switcher + Print/Copy Actions (Hidden in Print) */}
+                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 print:hidden shadow-sm">
+                      {/* Template Selector */}
+                      <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-lg border border-slate-800">
+                        <span className="text-[11px] font-semibold uppercase text-slate-400 px-2 flex items-center gap-1">
+                          <LayoutTemplate className="w-3.5 h-3.5 text-indigo-400" />
+                          Template:
+                        </span>
                         <button
-                          onClick={() => handleGenerateDoc("cv")}
-                          disabled={generatingCv}
+                          onClick={() => setSelectedTemplate("ivy")}
                           type="button"
-                          className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg transition font-medium cursor-pointer"
+                          className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                            selectedTemplate === "ivy"
+                              ? "bg-indigo-600 text-white shadow"
+                              : "text-slate-400 hover:text-white hover:bg-slate-800"
+                          }`}
                         >
-                          <RefreshCw className={`w-3.5 h-3.5 ${generatingCv ? "animate-spin" : ""}`} />
-                          <span>Regenerate</span>
+                          Classic Ivy
                         </button>
                         <button
-                          onClick={() => copyToClipboard(generatedCv, "cv")}
+                          onClick={() => setSelectedTemplate("tech")}
                           type="button"
-                          className="flex items-center gap-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg transition font-medium cursor-pointer shadow-sm"
+                          className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                            selectedTemplate === "tech"
+                              ? "bg-indigo-600 text-white shadow"
+                              : "text-slate-400 hover:text-white hover:bg-slate-800"
+                          }`}
+                        >
+                          Modern Tech
+                        </button>
+                        <button
+                          onClick={() => setSelectedTemplate("executive")}
+                          type="button"
+                          className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                            selectedTemplate === "executive"
+                              ? "bg-indigo-600 text-white shadow"
+                              : "text-slate-400 hover:text-white hover:bg-slate-800"
+                          }`}
+                        >
+                          Executive
+                        </button>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handlePrintPDF}
+                          type="button"
+                          className="flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-lg transition font-semibold cursor-pointer shadow-sm"
+                          title="Print / Save as PDF"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Export PDF</span>
+                        </button>
+                        <button
+                          onClick={() => copyToClipboard(resumeData.markdown || generatedCv || "", "cv")}
+                          type="button"
+                          className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-lg transition font-medium cursor-pointer"
                         >
                           {copiedKey === "cv" ? (
                             <>
-                              <Check className="w-3.5 h-3.5" />
-                              <span>Copied Markdown!</span>
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              <span className="text-emerald-400">Copied!</span>
                             </>
                           ) : (
                             <>
@@ -909,39 +1012,532 @@ export default function ShortlistrPortal() {
                             </>
                           )}
                         </button>
+                        <button
+                          onClick={() => handleGenerateDoc("cv")}
+                          disabled={generatingCv}
+                          type="button"
+                          className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg transition font-medium cursor-pointer"
+                          title="Regenerate with 2-Pass Engine"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${generatingCv ? "animate-spin" : ""}`} />
+                        </button>
                       </div>
                     </div>
 
-                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-5 sm:p-6 text-slate-200 font-mono text-xs sm:text-sm leading-relaxed whitespace-pre-wrap selection:bg-indigo-600/40 overflow-x-auto shadow-inner">
-                      {generatedCv}
+                    {/* In-Place Editing Notice */}
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-900/40 border border-slate-800/60 px-3 py-1.5 rounded-lg print:hidden">
+                      <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>
+                        <strong>In-Place Editing Enabled:</strong> Click directly into any text, title, or bullet point below to make manual edits before exporting.
+                      </span>
+                    </div>
+
+                    {/* LIVE EDITABLE RESUME CANVAS */}
+                    <div
+                      id="printable-studio"
+                      className="bg-white text-slate-900 p-8 sm:p-10 rounded-xl shadow-2xl transition-all border border-slate-200 print:p-0 print:border-none print:shadow-none print:rounded-none"
+                    >
+                      {/* TEMPLATE 1: CLASSIC IVY */}
+                      {selectedTemplate === "ivy" && (
+                        <div className="font-serif leading-relaxed text-slate-900 text-[13px] print:text-[11pt] space-y-4">
+                          {/* Header */}
+                          <div className="text-center border-b border-slate-900 pb-3 avoid-break">
+                            <h2
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="text-2xl font-bold tracking-tight uppercase text-black outline-none focus:bg-indigo-50/50"
+                            >
+                              {resumeData.name}
+                            </h2>
+                            <p
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="text-xs text-slate-700 mt-1 outline-none focus:bg-indigo-50/50"
+                            >
+                              {resumeData.contactInfo}
+                            </p>
+                          </div>
+
+                          {/* Summary */}
+                          {resumeData.summary && (
+                            <div className="avoid-break">
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-black border-b border-slate-400 pb-0.5 mb-1.5">
+                                Professional Summary
+                              </h3>
+                              <p
+                                contentEditable
+                                suppressContentEditableWarning
+                                className="text-justify leading-relaxed outline-none focus:bg-indigo-50/50"
+                              >
+                                {resumeData.summary}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Skills */}
+                          {resumeData.skills && resumeData.skills.length > 0 && (
+                            <div className="avoid-break">
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-black border-b border-slate-400 pb-0.5 mb-1.5">
+                                Technical Skills
+                              </h3>
+                              <div className="space-y-1 text-xs">
+                                {resumeData.skills.map((cat, idx) => (
+                                  <div key={idx} className="flex flex-wrap gap-1">
+                                    <strong
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      className="text-black outline-none"
+                                    >
+                                      {cat.category}:
+                                    </strong>{" "}
+                                    <span
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      className="text-slate-800 outline-none"
+                                    >
+                                      {cat.items.join(", ")}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Experience */}
+                          {resumeData.experience && resumeData.experience.length > 0 && (
+                            <div>
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-black border-b border-slate-400 pb-0.5 mb-2 avoid-break">
+                                Professional Experience
+                              </h3>
+                              <div className="space-y-3.5">
+                                {resumeData.experience.map((exp, idx) => (
+                                  <div key={idx} className="avoid-break space-y-1">
+                                    <div className="flex justify-between items-baseline font-bold text-black text-xs sm:text-[13px]">
+                                      <span
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="outline-none focus:bg-indigo-50/50"
+                                      >
+                                        {exp.role} — <span className="font-semibold text-slate-800">{exp.company}</span>
+                                      </span>
+                                      <span
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="text-xs font-normal text-slate-700 outline-none"
+                                      >
+                                        {exp.period}
+                                      </span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-600 italic">
+                                      <span contentEditable suppressContentEditableWarning className="outline-none">
+                                        {exp.location}
+                                      </span>
+                                    </div>
+                                    <ul className="list-disc pl-5 space-y-1 text-xs text-slate-800 leading-normal">
+                                      {exp.bullets.map((bullet, bIdx) => (
+                                        <li
+                                          key={bIdx}
+                                          contentEditable
+                                          suppressContentEditableWarning
+                                          className="outline-none focus:bg-indigo-50/50"
+                                        >
+                                          {bullet}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Education */}
+                          {resumeData.education && resumeData.education.length > 0 && (
+                            <div className="avoid-break">
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-black border-b border-slate-400 pb-0.5 mb-1.5">
+                                Education
+                              </h3>
+                              <div className="space-y-2 text-xs">
+                                {resumeData.education.map((edu, idx) => (
+                                  <div key={idx} className="flex justify-between items-baseline">
+                                    <div>
+                                      <strong
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="text-black outline-none"
+                                      >
+                                        {edu.degree}
+                                      </strong>{" "}
+                                      —{" "}
+                                      <span
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="text-slate-800 outline-none"
+                                      >
+                                        {edu.institution}
+                                      </span>
+                                    </div>
+                                    <span
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      className="text-slate-700 outline-none"
+                                    >
+                                      {edu.period}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* TEMPLATE 2: MODERN TECH */}
+                      {selectedTemplate === "tech" && (
+                        <div className="font-sans leading-relaxed text-slate-900 text-xs sm:text-[13px] print:text-[11pt] space-y-5">
+                          {/* Modern Header */}
+                          <div className="border-b-2 border-indigo-600 pb-3.5 avoid-break">
+                            <h2
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 outline-none focus:bg-indigo-50/50"
+                            >
+                              {resumeData.name}
+                            </h2>
+                            <p
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="text-xs font-medium text-slate-600 mt-1 outline-none focus:bg-indigo-50/50"
+                            >
+                              {resumeData.contactInfo}
+                            </p>
+                          </div>
+
+                          {/* Summary */}
+                          {resumeData.summary && (
+                            <div className="avoid-break">
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-700 mb-1 flex items-center gap-1.5">
+                                <Sparkles className="w-3.5 h-3.5 print:hidden" /> Summary
+                              </h3>
+                              <p
+                                contentEditable
+                                suppressContentEditableWarning
+                                className="text-slate-700 leading-relaxed outline-none focus:bg-indigo-50/50"
+                              >
+                                {resumeData.summary}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Technical Skills as Clean Badges */}
+                          {resumeData.skills && resumeData.skills.length > 0 && (
+                            <div className="avoid-break">
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-700 mb-2">
+                                Technical Competencies
+                              </h3>
+                              <div className="space-y-2">
+                                {resumeData.skills.map((cat, idx) => (
+                                  <div key={idx} className="flex flex-col sm:flex-row sm:items-baseline gap-1">
+                                    <span
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      className="font-bold text-slate-900 text-xs min-w-[140px] outline-none"
+                                    >
+                                      {cat.category}:
+                                    </span>
+                                    <div className="flex flex-wrap gap-1">
+                                      {cat.items.map((item, iIdx) => (
+                                        <span
+                                          key={iIdx}
+                                          contentEditable
+                                          suppressContentEditableWarning
+                                          className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-900 border border-indigo-200/80 font-medium text-[11px] outline-none"
+                                        >
+                                          {item}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Experience */}
+                          {resumeData.experience && resumeData.experience.length > 0 && (
+                            <div>
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-700 mb-2.5 avoid-break">
+                                Experience
+                              </h3>
+                              <div className="space-y-4">
+                                {resumeData.experience.map((exp, idx) => (
+                                  <div key={idx} className="avoid-break space-y-1">
+                                    <div className="flex justify-between items-baseline font-bold text-slate-900">
+                                      <span
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="text-sm text-slate-900 outline-none focus:bg-indigo-50/50"
+                                      >
+                                        {exp.role}{" "}
+                                        <span className="text-indigo-600 font-semibold font-mono text-xs">
+                                          @ {exp.company}
+                                        </span>
+                                      </span>
+                                      <span
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="text-xs font-mono text-slate-500 outline-none"
+                                      >
+                                        {exp.period}
+                                      </span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-500">
+                                      <span contentEditable suppressContentEditableWarning className="outline-none">
+                                        {exp.location}
+                                      </span>
+                                    </div>
+                                    <ul className="list-disc pl-5 space-y-1 text-xs text-slate-700 leading-relaxed">
+                                      {exp.bullets.map((bullet, bIdx) => (
+                                        <li
+                                          key={bIdx}
+                                          contentEditable
+                                          suppressContentEditableWarning
+                                          className="outline-none focus:bg-indigo-50/50"
+                                        >
+                                          {bullet}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Education */}
+                          {resumeData.education && resumeData.education.length > 0 && (
+                            <div className="avoid-break">
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-700 mb-1.5">
+                                Education
+                              </h3>
+                              <div className="space-y-1.5 text-xs">
+                                {resumeData.education.map((edu, idx) => (
+                                  <div key={idx} className="flex justify-between items-baseline">
+                                    <div>
+                                      <strong
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="text-slate-900 outline-none"
+                                      >
+                                        {edu.degree}
+                                      </strong>{" "}
+                                      —{" "}
+                                      <span
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="text-slate-700 outline-none"
+                                      >
+                                        {edu.institution}
+                                      </span>
+                                    </div>
+                                    <span
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      className="font-mono text-slate-500 text-[11px] outline-none"
+                                    >
+                                      {edu.period}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* TEMPLATE 3: EXECUTIVE */}
+                      {selectedTemplate === "executive" && (
+                        <div className="font-sans leading-relaxed text-slate-900 text-xs sm:text-[13px] print:text-[11pt] space-y-6">
+                          {/* Minimalist Executive Header */}
+                          <div className="text-center avoid-break pb-4 border-b border-slate-300">
+                            <h2
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="text-2xl sm:text-3xl font-light tracking-[0.2em] uppercase text-slate-900 outline-none focus:bg-indigo-50/50"
+                            >
+                              {resumeData.name}
+                            </h2>
+                            <p
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="text-xs tracking-wider text-slate-500 uppercase mt-1.5 outline-none focus:bg-indigo-50/50"
+                            >
+                              {resumeData.contactInfo}
+                            </p>
+                          </div>
+
+                          {/* Summary */}
+                          {resumeData.summary && (
+                            <div className="avoid-break">
+                              <h3 className="text-xs font-semibold tracking-[0.15em] uppercase text-slate-500 mb-1">
+                                Executive Profile
+                              </h3>
+                              <p
+                                contentEditable
+                                suppressContentEditableWarning
+                                className="text-slate-800 leading-relaxed italic border-l-2 border-slate-400 pl-3 outline-none focus:bg-indigo-50/50"
+                              >
+                                {resumeData.summary}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Skills */}
+                          {resumeData.skills && resumeData.skills.length > 0 && (
+                            <div className="avoid-break">
+                              <h3 className="text-xs font-semibold tracking-[0.15em] uppercase text-slate-500 mb-2">
+                                Core Capabilities
+                              </h3>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                {resumeData.skills.map((cat, idx) => (
+                                  <div key={idx} className="bg-slate-50 p-2 rounded border border-slate-200">
+                                    <strong
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      className="text-slate-900 block text-[11px] uppercase tracking-wider mb-0.5 outline-none"
+                                    >
+                                      {cat.category}
+                                    </strong>
+                                    <span
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      className="text-slate-700 outline-none"
+                                    >
+                                      {cat.items.join(" • ")}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Experience */}
+                          {resumeData.experience && resumeData.experience.length > 0 && (
+                            <div>
+                              <h3 className="text-xs font-semibold tracking-[0.15em] uppercase text-slate-500 mb-3 avoid-break">
+                                Leadership & Experience
+                              </h3>
+                              <div className="space-y-4">
+                                {resumeData.experience.map((exp, idx) => (
+                                  <div key={idx} className="avoid-break space-y-1">
+                                    <div className="flex justify-between items-baseline">
+                                      <h4
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="font-bold text-slate-900 text-sm outline-none focus:bg-indigo-50/50"
+                                      >
+                                        {exp.role}
+                                      </h4>
+                                      <span
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="text-xs tracking-wider text-slate-500 uppercase outline-none"
+                                      >
+                                        {exp.period}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-slate-600 font-medium">
+                                      <span contentEditable suppressContentEditableWarning className="outline-none">
+                                        {exp.company} — {exp.location}
+                                      </span>
+                                    </div>
+                                    <ul className="list-disc pl-5 space-y-1 text-xs text-slate-700 leading-normal pt-1">
+                                      {exp.bullets.map((bullet, bIdx) => (
+                                        <li
+                                          key={bIdx}
+                                          contentEditable
+                                          suppressContentEditableWarning
+                                          className="outline-none focus:bg-indigo-50/50"
+                                        >
+                                          {bullet}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Education */}
+                          {resumeData.education && resumeData.education.length > 0 && (
+                            <div className="avoid-break">
+                              <h3 className="text-xs font-semibold tracking-[0.15em] uppercase text-slate-500 mb-1.5">
+                                Academic Credentials
+                              </h3>
+                              <div className="space-y-1.5 text-xs">
+                                {resumeData.education.map((edu, idx) => (
+                                  <div key={idx} className="flex justify-between items-baseline">
+                                    <div>
+                                      <strong
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="text-slate-900 outline-none"
+                                      >
+                                        {edu.degree}
+                                      </strong>
+                                      ,{" "}
+                                      <span
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="text-slate-700 outline-none"
+                                      >
+                                        {edu.institution}
+                                      </span>
+                                    </div>
+                                    <span
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      className="text-slate-500 text-[11px] outline-none"
+                                    >
+                                      {edu.period}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* TAB 3: Cover Letter (On-Demand Generation) */}
+            {/* TAB 3: Cover Letter Studio (2-Pass Humanized Engine) */}
             {activeTab === "cover" && (
               <div className="space-y-4">
                 {!generatedCover ? (
-                  <div className="h-full min-h-[380px] flex flex-col items-center justify-center text-center p-8 bg-slate-950/40 border border-slate-800/80 rounded-2xl">
+                  <div className="h-full min-h-[380px] flex flex-col items-center justify-center text-center p-8 bg-slate-950/40 border border-slate-800/80 rounded-2xl print:hidden">
                     <div className="w-14 h-14 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 mb-3.5">
                       <Mail className="w-7 h-7 stroke-[1.5]" />
                     </div>
                     <h3 className="text-base font-semibold text-white">Truth-Grounded Cover Letter</h3>
                     <p className="text-xs sm:text-sm text-slate-400 max-w-md mt-1.5 leading-relaxed">
-                      Draft a natural, 3-paragraph conversational cover letter specifically highlighting qualifications for this role with zero banned buzzwords.
+                      Our 2-Pass Engine extracts your unique technical hook and crafts a high-burstiness, 3-paragraph conversational letter free of generic corporate clichés.
                     </p>
                     <button
                       onClick={() => handleGenerateDoc("cover")}
                       disabled={generatingCover || !resumeText.trim() || !jobDescription.trim()}
                       type="button"
+                      id="draft-cover-btn"
                       className="mt-5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-600/20 disabled:opacity-50 flex items-center gap-2 transition cursor-pointer"
                     >
                       {generatingCover ? (
                         <>
                           <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>Drafting Cover Letter...</span>
+                          <span>Architecting 2-Pass Cover Letter...</span>
                         </>
                       ) : (
                         <>
@@ -952,25 +1548,26 @@ export default function ShortlistrPortal() {
                     </button>
                     {!resumeText.trim() && (
                       <span className="text-[11px] text-amber-400/80 mt-2">
-                        * Please paste resume and job description first
+                        * Please paste resume and job description on the left first
                       </span>
                     )}
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
+                    {/* Control Bar (Hidden in Print) */}
+                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-2 print:hidden shadow-sm">
                       <div className="text-xs text-slate-400">
-                        Concise 3-paragraph letter written with natural human tone and zero banned buzzwords.
+                        High burstiness 3-paragraph letter. Free of corporate clichés.
                       </div>
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => handleGenerateDoc("cover")}
-                          disabled={generatingCover}
+                          onClick={handlePrintPDF}
                           type="button"
-                          className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg transition font-medium cursor-pointer"
+                          className="flex items-center gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-lg transition font-semibold cursor-pointer shadow-sm"
+                          title="Print / Export to PDF"
                         >
-                          <RefreshCw className={`w-3.5 h-3.5 ${generatingCover ? "animate-spin" : ""}`} />
-                          <span>Regenerate</span>
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Export PDF</span>
                         </button>
                         <button
                           onClick={() => copyToClipboard(generatedCover, "cover")}
@@ -989,11 +1586,38 @@ export default function ShortlistrPortal() {
                             </>
                           )}
                         </button>
+                        <button
+                          onClick={() => handleGenerateDoc("cover")}
+                          disabled={generatingCover}
+                          type="button"
+                          className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1.5 rounded-lg transition font-medium cursor-pointer"
+                          title="Regenerate Cover Letter"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${generatingCover ? "animate-spin" : ""}`} />
+                        </button>
                       </div>
                     </div>
 
-                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-6 sm:p-8 text-slate-100 text-sm leading-relaxed whitespace-pre-line font-sans shadow-inner">
-                      {generatedCover}
+                    {/* In-Place Editing Notice */}
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-900/40 border border-slate-800/60 px-3 py-1.5 rounded-lg print:hidden">
+                      <Edit3 className="w-3.5 h-3.5 text-violet-400" />
+                      <span>
+                        <strong>In-Place Editing Enabled:</strong> Click directly into the letter below to polish or add personal touches before exporting.
+                      </span>
+                    </div>
+
+                    {/* LIVE EDITABLE COVER LETTER CANVAS */}
+                    <div
+                      id="printable-studio"
+                      className="bg-white text-slate-900 p-8 sm:p-12 rounded-xl shadow-2xl font-serif text-sm leading-relaxed whitespace-pre-line border border-slate-200 print:p-0 print:border-none print:shadow-none print:rounded-none"
+                    >
+                      <div
+                        contentEditable
+                        suppressContentEditableWarning
+                        className="outline-none focus:bg-indigo-50/50 p-2 rounded"
+                      >
+                        {generatedCover}
+                      </div>
                     </div>
                   </div>
                 )}
