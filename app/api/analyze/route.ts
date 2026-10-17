@@ -73,6 +73,25 @@ function cleanAndParseJSON<T = any>(rawText: string): T {
   }
 }
 
+async function callGroqWithFallback(groq: Groq, params: any) {
+  const models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"];
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      return await groq.chat.completions.create({
+        ...params,
+        model,
+      });
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`Groq model ${model} failed, attempting next model:`, err?.message || err);
+    }
+  }
+
+  throw lastError;
+}
+
 export async function POST(req: Request) {
   try {
     const apiKey = process.env.GROQ_API_KEY;
@@ -138,8 +157,7 @@ ${jobDescription}
 
 Extract the matched and missing hard/soft skills, experience alignment, education alignment, and tailored bullet suggestions as structured JSON now.`;
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+    const completion = await callGroqWithFallback(groq, {
       messages: [
         { role: "system", content: systemInstruction },
         { role: "user", content: userPrompt },

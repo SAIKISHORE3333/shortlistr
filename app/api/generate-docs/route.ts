@@ -73,6 +73,25 @@ function cleanAndParseJSON<T = any>(rawText: string): T {
   }
 }
 
+async function callGroqWithFallback(groq: Groq, params: any) {
+  const models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"];
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      return await groq.chat.completions.create({
+        ...params,
+        model,
+      });
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`Groq model ${model} failed in generate-docs, attempting next model:`, err?.message || err);
+    }
+  }
+
+  throw lastError;
+}
+
 export async function POST(req: Request) {
   try {
     const apiKey = process.env.GROQ_API_KEY;
@@ -129,8 +148,7 @@ ${jobDescription}
 
 Generate the Meta-Architect Brief as plain text.`;
 
-    const pass1Response = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+    const pass1Response = await callGroqWithFallback(groq, {
       messages: [
         { role: "system", content: pass1Instruction },
         { role: "user", content: pass1Prompt },
@@ -185,8 +203,7 @@ ${jobDescription}
 
 Generate the clean JSON Cranfield Formal cover letter now.`;
 
-      const pass2CoverResponse = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
+      const pass2CoverResponse = await callGroqWithFallback(groq, {
         messages: [
           { role: "system", content: pass2CoverInstruction },
           { role: "user", content: pass2CoverPrompt },
@@ -335,8 +352,7 @@ ${jobDescription}
 
 Generate the complete structured tailored resume JSON conforming to Cranfield University Gold Standard and ATS guidelines now.`;
 
-    const pass2CvResponse = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
+    const pass2CvResponse = await callGroqWithFallback(groq, {
       messages: [
         { role: "system", content: pass2CvInstruction },
         { role: "user", content: pass2CvPrompt },
