@@ -21,8 +21,8 @@ body {
    PRINT ENGINE STYLES (Export to PDF)
    ============================================================ */
 @page {
-  size: letter;
-  margin: 0.5in;
+  size: A4;
+  margin: 15mm;
 }
 
 @media print {

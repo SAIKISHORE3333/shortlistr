@@ -27,7 +27,8 @@ import {
   Wand2,
   Edit3,
   Download,
-  LayoutTemplate
+  LayoutTemplate,
+  Award
 } from "lucide-react";
 
 interface TailoredBullet {
@@ -69,6 +70,7 @@ interface ExperienceItem {
   company: string;
   location: string;
   period: string;
+  companyOverview?: string;
   bullets: string[];
 }
 
@@ -77,20 +79,51 @@ interface EducationItem {
   institution: string;
   location: string;
   period: string;
+  modules?: string;
+  thesis?: string;
   details?: string;
+}
+
+interface Extracurricular {
+  languages?: string;
+  itSkills?: string;
+  interests?: string;
+  memberships?: string;
+  volunteering?: string;
 }
 
 interface ResumeData {
   name: string;
+  contact: string;
   contactInfo: string;
+  personalStatement?: string;
   summary: string;
+  keyAchievements?: string[];
   skills: SkillCategory[];
   experience: ExperienceItem[];
   education: EducationItem[];
+  extracurricular?: Extracurricular;
   markdown?: string;
 }
 
-type TemplateId = "ivy" | "tech" | "executive";
+interface CoverLetterData {
+  recipientName?: string;
+  companyName?: string;
+  companyAddress?: string;
+  jobTitle?: string;
+  jobReference?: string;
+  salutation?: string;
+  para1Hook?: string;
+  para2Evidence?: string;
+  para3Value?: string;
+  closingSentence?: string;
+  signoff?: string;
+  fullText?: string;
+  date?: string;
+}
+
+type CvTemplateId = "cranfield" | "ivy" | "tech" | "executive";
+type CoverTemplateId = "cranfield" | "modern";
 
 const SAMPLE_RESUME = `Jane Doe
 Senior Full-Stack Engineer | Austin, TX | jane.doe@email.com | (512) 555-0199
@@ -121,7 +154,7 @@ EDUCATION
 B.S. in Computer Science | University of Texas at Austin (2015 - 2019)`;
 
 const SAMPLE_JOB = `Senior Full-Stack Engineer (Next.js & Cloud)
-Vanguard Tech Solutions - Remote
+Vanguard Tech Solutions - London, UK (or Remote)
 
 About the Role:
 We are seeking an experienced Senior Full-Stack Engineer to lead the architecture and development of our next-generation AI analytics platform. You will design resilient distributed systems, optimize frontend performance with Next.js App Router, and collaborate directly with product and design teams.
@@ -152,8 +185,10 @@ export default function ShortlistrPortal() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Document Studio State
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>("ivy");
+  const [selectedTemplate, setSelectedTemplate] = useState<CvTemplateId>("cranfield");
+  const [coverTemplate, setCoverTemplate] = useState<CoverTemplateId>("cranfield");
   const [resumeData, setResumeData] = useState<ResumeData | null>(null);
+  const [coverData, setCoverData] = useState<CoverLetterData | null>(null);
   const [generatedCv, setGeneratedCv] = useState<string | null>(null);
   const [generatingCv, setGeneratingCv] = useState(false);
   const [generatedCover, setGeneratedCover] = useState<string | null>(null);
@@ -186,6 +221,7 @@ export default function ShortlistrPortal() {
       setResult(data);
       // Invalidate previously cached documents when analyzing a fresh job application
       setResumeData(null);
+      setCoverData(null);
       setGeneratedCv(null);
       setGeneratedCover(null);
       setActiveTab("ats");
@@ -225,21 +261,34 @@ export default function ShortlistrPortal() {
       if (docType === "cv") {
         const rData: ResumeData = data.resumeData || {
           name: data.name || "Candidate",
+          contact: data.contact || data.contactInfo || "",
           contactInfo: data.contact || data.contactInfo || "",
+          personalStatement: data.personalStatement || data.summary || "",
           summary: data.summary || "",
+          keyAchievements: data.keyAchievements || [],
           skills: data.skills || [],
           experience: data.experience || [],
           education: data.education || [],
+          extracurricular: data.extracurricular,
           markdown: data.content || "",
         };
-        if (!rData.contactInfo && (rData as any).contact) {
-          rData.contactInfo = (rData as any).contact;
+        if (!rData.contact && rData.contactInfo) {
+          rData.contact = rData.contactInfo;
+        }
+        if (!rData.contactInfo && rData.contact) {
+          rData.contactInfo = rData.contact;
         }
         setResumeData(rData);
         setGeneratedCv(data.content || rData.markdown || "");
       } else {
         const coverText = data.coverLetter || data.content || "";
         setGeneratedCover(coverText);
+        if (data.coverData) {
+          setCoverData({
+            ...data.coverData,
+            date: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }),
+          });
+        }
       }
     } catch (err: any) {
       setDocError(
@@ -263,6 +312,7 @@ export default function ShortlistrPortal() {
     setJobDescription("");
     setResult(null);
     setResumeData(null);
+    setCoverData(null);
     setGeneratedCv(null);
     setGeneratedCover(null);
     setError(null);
@@ -306,12 +356,12 @@ export default function ShortlistrPortal() {
               <h1 className="text-xl font-bold tracking-tight text-white">
                 Shortlistr<span className="text-indigo-400">.ai</span>
               </h1>
-              <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                All-in-One Studio
+              <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
+                <Award className="w-3 h-3 text-amber-400" /> Cranfield Certified
               </span>
             </div>
             <p className="text-xs text-slate-400 hidden sm:block">
-              Hybrid ATS Scanner + 2-Pass Resume Studio & Multi-Template Print Engine
+              Hybrid ATS Scanner + Official Cranfield University Layout & Multi-Template Print Studio
             </p>
           </div>
         </div>
@@ -352,7 +402,7 @@ export default function ShortlistrPortal() {
               className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-600/20 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer active:scale-95"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Export to PDF</span>
+              <span>Export A4 PDF</span>
             </button>
           )}
         </div>
@@ -519,7 +569,7 @@ export default function ShortlistrPortal() {
 
           {/* Results Container */}
           <div className="flex-1 p-5 sm:p-6 overflow-y-auto max-h-[860px] print:p-0 print:m-0 print:max-h-none print:overflow-visible">
-            {/* Document Error Banner (Hidden in Print) */}
+            {/* Document Error Banner with Interactive Retry Button (Hidden in Print) */}
             {docError && (
               <div className="mb-4 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3 print:hidden shadow-sm">
                 <div className="flex items-center gap-2">
@@ -551,19 +601,19 @@ export default function ShortlistrPortal() {
                 </p>
                 <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500">
                   <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
+                    Cranfield Gold Standard
+                  </span>
+                  <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
                     Deterministic Scoring
                   </span>
                   <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
                     2-Pass Meta-Architect AI
                   </span>
                   <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
-                    3 In-Portal Templates
+                    In-Place Editing
                   </span>
                   <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
-                    Direct In-Place Editing
-                  </span>
-                  <span className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-800">
-                    Clean PDF Export Engine
+                    A4 PDF Print Engine
                   </span>
                 </div>
               </div>
@@ -821,7 +871,7 @@ export default function ShortlistrPortal() {
                               key={idx}
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-rose-500/10 text-rose-300 border border-rose-500/20"
                             >
-                              <AlertCircle className="w-3 h-3 text-rose-400" />
+                              <AlertCircle className="w-4 h-4 text-rose-400" />
                               {kw}
                             </span>
                           ))
@@ -843,7 +893,7 @@ export default function ShortlistrPortal() {
                               key={idx}
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20"
                             >
-                              <AlertCircle className="w-3 h-3 text-amber-400" />
+                              <AlertCircle className="w-4 h-4 text-amber-400" />
                               {kw}
                             </span>
                           ))}
@@ -923,24 +973,24 @@ export default function ShortlistrPortal() {
               <div className="space-y-4">
                 {!resumeData ? (
                   <div className="h-full min-h-[380px] flex flex-col items-center justify-center text-center p-8 bg-slate-950/40 border border-slate-800/80 rounded-2xl print:hidden">
-                    <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-3.5">
-                      <FileCode className="w-7 h-7 stroke-[1.5]" />
+                    <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-3.5">
+                      <Award className="w-7 h-7 stroke-[1.5]" />
                     </div>
                     <h3 className="text-base font-semibold text-white">All-in-One Tailored Resume Studio</h3>
                     <p className="text-xs sm:text-sm text-slate-400 max-w-md mt-1.5 leading-relaxed">
-                      Generate a structured, truth-grounded resume powered by our 2-Pass Meta-Architect AI. Preview and switch between 3 commercial ATS layouts in real-time.
+                      Generate a structured, truth-grounded resume powered by our 2-Pass Meta-Architect AI. Features the official <strong className="text-amber-300">Cranfield University Gold Standard</strong> and 3 additional commercial ATS layouts.
                     </p>
                     <button
                       onClick={() => handleGenerateDoc("cv")}
                       disabled={generatingCv || !resumeText.trim() || !jobDescription.trim()}
                       type="button"
                       id="generate-cv-btn"
-                      className="mt-5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 disabled:opacity-50 flex items-center gap-2 transition cursor-pointer"
+                      className="mt-5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-gradient-to-r from-amber-600 to-indigo-600 hover:from-amber-500 hover:to-indigo-500 text-white shadow-lg shadow-indigo-600/20 disabled:opacity-50 flex items-center gap-2 transition cursor-pointer"
                     >
                       {generatingCv ? (
                         <>
                           <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>Architecting 2-Pass Tailored CV...</span>
+                          <span>Architecting Cranfield & ATS CV...</span>
                         </>
                       ) : (
                         <>
@@ -963,8 +1013,20 @@ export default function ShortlistrPortal() {
                       <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-lg border border-slate-800">
                         <span className="text-[11px] font-semibold uppercase text-slate-400 px-2 flex items-center gap-1">
                           <LayoutTemplate className="w-3.5 h-3.5 text-indigo-400" />
-                          Template:
+                          Layout:
                         </span>
+                        <button
+                          onClick={() => setSelectedTemplate("cranfield")}
+                          type="button"
+                          className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer flex items-center gap-1 ${
+                            selectedTemplate === "cranfield"
+                              ? "bg-amber-600 text-white shadow"
+                              : "text-amber-300/80 hover:text-white hover:bg-slate-800"
+                          }`}
+                        >
+                          <Award className="w-3 h-3 text-amber-300" />
+                          Cranfield Gold
+                        </button>
                         <button
                           onClick={() => setSelectedTemplate("ivy")}
                           type="button"
@@ -1009,7 +1071,7 @@ export default function ShortlistrPortal() {
                           title="Print / Save as PDF"
                         >
                           <Printer className="w-3.5 h-3.5" />
-                          <span>Export PDF</span>
+                          <span>Export A4 PDF</span>
                         </button>
                         <button
                           onClick={() => copyToClipboard(resumeData.markdown || generatedCv || "", "cv")}
@@ -1051,9 +1113,201 @@ export default function ShortlistrPortal() {
                     {/* LIVE EDITABLE RESUME CANVAS */}
                     <div
                       id="printable-studio"
-                      className="bg-white text-slate-900 p-8 sm:p-10 rounded-xl shadow-2xl transition-all border border-slate-200 print:p-0 print:border-none print:shadow-none print:rounded-none"
+                      className="bg-white text-slate-900 p-8 sm:p-12 rounded-xl shadow-2xl transition-all border border-slate-200 print:p-0 print:border-none print:shadow-none print:rounded-none"
                     >
-                      {/* TEMPLATE 1: CLASSIC IVY */}
+                      {/* TEMPLATE 1: CRANFIELD GOLD STANDARD */}
+                      {selectedTemplate === "cranfield" && (
+                        <div className="font-serif leading-relaxed text-slate-900 text-[12.5px] print:text-[10pt] space-y-4">
+                          {/* Header: Center-aligned candidate name in bold uppercase, contact bar separated by pipes */}
+                          <div className="text-center pb-2 avoid-break border-b border-black">
+                            <h2
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="text-2xl font-bold tracking-wider uppercase text-black outline-none focus:bg-indigo-50/50"
+                            >
+                              {resumeData.name}
+                            </h2>
+                            <p
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="text-xs text-slate-800 mt-1 outline-none focus:bg-indigo-50/50 font-sans"
+                            >
+                              {resumeData.contact || resumeData.contactInfo}
+                            </p>
+                          </div>
+
+                          {/* Section 1: PERSONAL STATEMENT */}
+                          <div className="avoid-break">
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-black border-b border-black pb-0.5 mb-1.5">
+                              Personal Statement
+                            </h3>
+                            <p
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="text-justify leading-relaxed text-slate-900 outline-none focus:bg-indigo-50/50"
+                            >
+                              {resumeData.personalStatement || resumeData.summary}
+                            </p>
+                          </div>
+
+                          {/* Section 2: KEY ACHIEVEMENTS */}
+                          {resumeData.keyAchievements && resumeData.keyAchievements.length > 0 && (
+                            <div className="avoid-break">
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-black border-b border-black pb-0.5 mb-1.5">
+                                Key Achievements
+                              </h3>
+                              <ul className="list-disc pl-5 space-y-1 text-xs text-slate-900 leading-normal">
+                                {resumeData.keyAchievements.map((ach, idx) => (
+                                  <li
+                                    key={idx}
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    className="outline-none focus:bg-indigo-50/50"
+                                  >
+                                    {ach}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* Section 3: EDUCATION */}
+                          {resumeData.education && resumeData.education.length > 0 && (
+                            <div className="avoid-break">
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-black border-b border-black pb-0.5 mb-1.5">
+                                Education
+                              </h3>
+                              <div className="space-y-2.5 text-xs">
+                                {resumeData.education.map((edu, idx) => (
+                                  <div key={idx} className="space-y-0.5 avoid-break">
+                                    <div className="flex justify-between items-baseline font-bold text-black">
+                                      <span contentEditable suppressContentEditableWarning className="outline-none">
+                                        {edu.institution}
+                                      </span>
+                                      <span
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="text-xs font-normal text-slate-700 outline-none"
+                                      >
+                                        {edu.period}
+                                      </span>
+                                    </div>
+                                    <div className="text-slate-800 italic">
+                                      <span contentEditable suppressContentEditableWarning className="outline-none">
+                                        {edu.degree}{edu.location ? `, ${edu.location}` : ""}
+                                      </span>
+                                    </div>
+                                    {edu.modules && (
+                                      <div className="text-[11.5px] text-slate-700">
+                                        <strong className="text-black font-semibold">Key Modules:</strong>{" "}
+                                        <span contentEditable suppressContentEditableWarning className="outline-none">
+                                          {edu.modules.replace(/^Key Modules:\s*/i, "")}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {edu.thesis && (
+                                      <div className="text-[11.5px] text-slate-700">
+                                        <strong className="text-black font-semibold">Thesis:</strong>{" "}
+                                        <span contentEditable suppressContentEditableWarning className="outline-none">
+                                          {edu.thesis.replace(/^Thesis:\s*/i, "")}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Section 4: CAREER HISTORY */}
+                          {resumeData.experience && resumeData.experience.length > 0 && (
+                            <div>
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-black border-b border-black pb-0.5 mb-2 avoid-break">
+                                Career History
+                              </h3>
+                              <div className="space-y-4">
+                                {resumeData.experience.map((exp, idx) => (
+                                  <div key={idx} className="avoid-break space-y-1.5">
+                                    <div className="flex justify-between items-baseline font-bold text-black text-xs sm:text-[13px]">
+                                      <span contentEditable suppressContentEditableWarning className="outline-none">
+                                        {exp.company}, {exp.location} — <span className="font-semibold text-slate-800">{exp.role}</span>
+                                      </span>
+                                      <span
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        className="text-xs font-normal text-slate-700 outline-none"
+                                      >
+                                        {exp.period}
+                                      </span>
+                                    </div>
+                                    {exp.companyOverview && (
+                                      <div className="text-[11.5px] text-slate-700 italic border-l-2 border-slate-300 pl-2">
+                                        <span contentEditable suppressContentEditableWarning className="outline-none">
+                                          {exp.companyOverview}
+                                        </span>
+                                      </div>
+                                    )}
+                                    <ul className="list-disc pl-5 space-y-1 text-xs text-slate-900 leading-normal">
+                                      {exp.bullets.map((bullet, bIdx) => (
+                                        <li
+                                          key={bIdx}
+                                          contentEditable
+                                          suppressContentEditableWarning
+                                          className="outline-none focus:bg-indigo-50/50"
+                                        >
+                                          {bullet}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Section 5: SKILLS, INTERESTS & EXTRACURRICULAR ACTIVITIES */}
+                          <div className="avoid-break pt-1">
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-black border-b border-black pb-0.5 mb-1.5">
+                              Skills, Interests & Extracurricular Activities
+                            </h3>
+                            <div className="space-y-1 text-xs leading-relaxed text-slate-900">
+                              <div>
+                                <strong className="text-black font-bold">Languages:</strong>{" "}
+                                <span contentEditable suppressContentEditableWarning className="outline-none">
+                                  {resumeData.extracurricular?.languages || "English (Native / Full Professional Proficiency)"}
+                                </span>
+                              </div>
+                              <div>
+                                <strong className="text-black font-bold">IT Skills:</strong>{" "}
+                                <span contentEditable suppressContentEditableWarning className="outline-none">
+                                  {resumeData.extracurricular?.itSkills ||
+                                    (resumeData.skills?.map(s => s.items.join(", ")).join(", ") || "TypeScript, React, Next.js, Node.js, PostgreSQL, Docker, AWS, Git")}
+                                </span>
+                              </div>
+                              <div>
+                                <strong className="text-black font-bold">Individual Interests:</strong>{" "}
+                                <span contentEditable suppressContentEditableWarning className="outline-none">
+                                  {resumeData.extracurricular?.interests || "Open-source development, competitive cycling, technical writing, cloud architecture"}
+                                </span>
+                              </div>
+                              <div>
+                                <strong className="text-black font-bold">Memberships:</strong>{" "}
+                                <span contentEditable suppressContentEditableWarning className="outline-none">
+                                  {resumeData.extracurricular?.memberships || "British Computer Society (BCS), IEEE Computer Society"}
+                                </span>
+                              </div>
+                              <div>
+                                <strong className="text-black font-bold">Volunteering:</strong>{" "}
+                                <span contentEditable suppressContentEditableWarning className="outline-none">
+                                  {resumeData.extracurricular?.volunteering || "STEM Ambassador and CodeClub technical mentor for aspiring engineers"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TEMPLATE 2: CLASSIC IVY */}
                       {selectedTemplate === "ivy" && (
                         <div className="font-serif leading-relaxed text-slate-900 text-[13px] print:text-[11pt] space-y-4">
                           {/* Header */}
@@ -1070,7 +1324,7 @@ export default function ShortlistrPortal() {
                               suppressContentEditableWarning
                               className="text-xs text-slate-700 mt-1 outline-none focus:bg-indigo-50/50"
                             >
-                              {resumeData.contactInfo}
+                              {resumeData.contact || resumeData.contactInfo}
                             </p>
                           </div>
 
@@ -1208,7 +1462,7 @@ export default function ShortlistrPortal() {
                         </div>
                       )}
 
-                      {/* TEMPLATE 2: MODERN TECH */}
+                      {/* TEMPLATE 3: MODERN TECH */}
                       {selectedTemplate === "tech" && (
                         <div className="font-sans leading-relaxed text-slate-900 text-xs sm:text-[13px] print:text-[11pt] space-y-5">
                           {/* Modern Header */}
@@ -1225,7 +1479,7 @@ export default function ShortlistrPortal() {
                               suppressContentEditableWarning
                               className="text-xs font-medium text-slate-600 mt-1 outline-none focus:bg-indigo-50/50"
                             >
-                              {resumeData.contactInfo}
+                              {resumeData.contact || resumeData.contactInfo}
                             </p>
                           </div>
 
@@ -1371,7 +1625,7 @@ export default function ShortlistrPortal() {
                         </div>
                       )}
 
-                      {/* TEMPLATE 3: EXECUTIVE */}
+                      {/* TEMPLATE 4: EXECUTIVE */}
                       {selectedTemplate === "executive" && (
                         <div className="font-sans leading-relaxed text-slate-900 text-xs sm:text-[13px] print:text-[11pt] space-y-6">
                           {/* Minimalist Executive Header */}
@@ -1388,7 +1642,7 @@ export default function ShortlistrPortal() {
                               suppressContentEditableWarning
                               className="text-xs tracking-wider text-slate-500 uppercase mt-1.5 outline-none focus:bg-indigo-50/50"
                             >
-                              {resumeData.contactInfo}
+                              {resumeData.contact || resumeData.contactInfo}
                             </p>
                           </div>
 
@@ -1531,7 +1785,7 @@ export default function ShortlistrPortal() {
               </div>
             )}
 
-            {/* TAB 3: Cover Letter Studio (2-Pass Humanized Engine) */}
+            {/* TAB 3: Cover Letter Studio (Cranfield Formal & Conversational Modern) */}
             {activeTab === "cover" && (
               <div className="space-y-4">
                 {!generatedCover ? (
@@ -1539,16 +1793,16 @@ export default function ShortlistrPortal() {
                     <div className="w-14 h-14 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 mb-3.5">
                       <Mail className="w-7 h-7 stroke-[1.5]" />
                     </div>
-                    <h3 className="text-base font-semibold text-white">Truth-Grounded Cover Letter</h3>
+                    <h3 className="text-base font-semibold text-white">Truth-Grounded Cover Letter Studio</h3>
                     <p className="text-xs sm:text-sm text-slate-400 max-w-md mt-1.5 leading-relaxed">
-                      Our 2-Pass Engine extracts your unique technical hook and crafts a high-burstiness, 3-paragraph conversational letter free of generic corporate clichés.
+                      Our 2-Pass Engine extracts your unique technical hook and crafts a high-burstiness, 3-paragraph letter following official <strong className="text-violet-300">Cranfield University Formal</strong> standards.
                     </p>
                     <button
                       onClick={() => handleGenerateDoc("cover")}
                       disabled={generatingCover || !resumeText.trim() || !jobDescription.trim()}
                       type="button"
                       id="draft-cover-btn"
-                      className="mt-5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-600/20 disabled:opacity-50 flex items-center gap-2 transition cursor-pointer"
+                      className="mt-5 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-violet-600/20 disabled:opacity-50 flex items-center gap-2 transition cursor-pointer"
                     >
                       {generatingCover ? (
                         <>
@@ -1571,10 +1825,39 @@ export default function ShortlistrPortal() {
                 ) : (
                   <div className="space-y-4">
                     {/* Control Bar (Hidden in Print) */}
-                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-2 print:hidden shadow-sm">
-                      <div className="text-xs text-slate-400">
-                        High burstiness 3-paragraph letter. Free of corporate clichés.
+                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 print:hidden shadow-sm">
+                      {/* Format Toggle */}
+                      <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-lg border border-slate-800">
+                        <span className="text-[11px] font-semibold uppercase text-slate-400 px-2 flex items-center gap-1">
+                          <LayoutTemplate className="w-3.5 h-3.5 text-violet-400" />
+                          Format:
+                        </span>
+                        <button
+                          onClick={() => setCoverTemplate("cranfield")}
+                          type="button"
+                          className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer flex items-center gap-1 ${
+                            coverTemplate === "cranfield"
+                              ? "bg-violet-600 text-white shadow"
+                              : "text-violet-300/80 hover:text-white hover:bg-slate-800"
+                          }`}
+                        >
+                          <Award className="w-3 h-3 text-violet-300" />
+                          Cranfield Formal
+                        </button>
+                        <button
+                          onClick={() => setCoverTemplate("modern")}
+                          type="button"
+                          className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
+                            coverTemplate === "modern"
+                              ? "bg-violet-600 text-white shadow"
+                              : "text-slate-400 hover:text-white hover:bg-slate-800"
+                          }`}
+                        >
+                          Conversational
+                        </button>
                       </div>
+
+                      {/* Action Buttons */}
                       <div className="flex items-center gap-2">
                         <button
                           onClick={handlePrintPDF}
@@ -1583,7 +1866,7 @@ export default function ShortlistrPortal() {
                           title="Print / Export to PDF"
                         >
                           <Printer className="w-3.5 h-3.5" />
-                          <span>Export PDF</span>
+                          <span>Export A4 PDF</span>
                         </button>
                         <button
                           onClick={() => copyToClipboard(generatedCover, "cover")}
@@ -1625,15 +1908,127 @@ export default function ShortlistrPortal() {
                     {/* LIVE EDITABLE COVER LETTER CANVAS */}
                     <div
                       id="printable-studio"
-                      className="bg-white text-slate-900 p-8 sm:p-12 rounded-xl shadow-2xl font-serif text-sm leading-relaxed whitespace-pre-line border border-slate-200 print:p-0 print:border-none print:shadow-none print:rounded-none"
+                      className="bg-white text-slate-900 p-8 sm:p-14 rounded-xl shadow-2xl font-serif leading-relaxed border border-slate-200 print:p-0 print:border-none print:shadow-none print:rounded-none"
                     >
-                      <div
-                        contentEditable
-                        suppressContentEditableWarning
-                        className="outline-none focus:bg-indigo-50/50 p-2 rounded"
-                      >
-                        {generatedCover}
-                      </div>
+                      {/* CRANFIELD FORMAL COVER LETTER */}
+                      {coverTemplate === "cranfield" && (
+                        <div className="space-y-4 text-[13px] print:text-[11pt] text-slate-900">
+                          {/* Top Right: Candidate Contact Details */}
+                          <div className="flex justify-end avoid-break">
+                            <div
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="text-right text-xs text-slate-800 space-y-0.5 outline-none focus:bg-indigo-50/50"
+                            >
+                              <p className="font-bold text-sm text-black">{resumeData?.name || "Candidate Name"}</p>
+                              <p>{resumeData?.contact || resumeData?.contactInfo || "London, UK | +44 7700 900077"}</p>
+                            </div>
+                          </div>
+
+                          {/* Top Left: Recruiter Details & Date */}
+                          <div
+                            contentEditable
+                            suppressContentEditableWarning
+                            className="text-xs text-slate-800 space-y-0.5 avoid-break outline-none focus:bg-indigo-50/50"
+                          >
+                            <p className="font-bold text-black">{coverData?.recipientName || "The Hiring Manager"}</p>
+                            <p>{coverData?.companyName || "Target Organisation"}</p>
+                            <p>{coverData?.companyAddress || "London, United Kingdom"}</p>
+                            <p className="pt-2 text-slate-700">
+                              {coverData?.date || new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+                            </p>
+                          </div>
+
+                          {/* Salutation */}
+                          <div className="pt-2 avoid-break">
+                            <p contentEditable suppressContentEditableWarning className="font-semibold text-black outline-none focus:bg-indigo-50/50">
+                              {coverData?.salutation || "Dear Hiring Team,"}
+                            </p>
+                          </div>
+
+                          {/* Subject Line (Bold RE:) */}
+                          <div className="avoid-break">
+                            <p
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="font-bold text-black text-sm tracking-wide border-b border-slate-300 pb-1 outline-none focus:bg-indigo-50/50"
+                            >
+                              RE: Application for {coverData?.jobTitle || "Role"} {coverData?.jobReference ? `(${coverData.jobReference})` : ""}
+                            </p>
+                          </div>
+
+                          {/* Paragraph 1: Company Connection & Industry Hook */}
+                          <div className="avoid-break">
+                            <p
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="text-justify leading-relaxed outline-none focus:bg-indigo-50/50"
+                            >
+                              {coverData?.para1Hook ||
+                                generatedCover.split("\n\n")[0] ||
+                                "Developing resilient distributed software architectures requires rigorous technical discipline..."}
+                            </p>
+                          </div>
+
+                          {/* Paragraph 2: Evidenced Skills & Project Match */}
+                          <div className="avoid-break">
+                            <p
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="text-justify leading-relaxed outline-none focus:bg-indigo-50/50"
+                            >
+                              {coverData?.para2Evidence ||
+                                generatedCover.split("\n\n")[1] ||
+                                "In prior roles, engineering responsibilities encompassed building high-throughput microservices and scaling event-driven pipelines..."}
+                            </p>
+                          </div>
+
+                          {/* Paragraph 3: Mutual Value Delivery */}
+                          <div className="avoid-break">
+                            <p
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="text-justify leading-relaxed outline-none focus:bg-indigo-50/50"
+                            >
+                              {coverData?.para3Value ||
+                                generatedCover.split("\n\n")[2] ||
+                                "Joining your organization offers a high-impact opportunity to apply these competencies directly to your strategic roadmap..."}
+                            </p>
+                          </div>
+
+                          {/* Closing Sentence */}
+                          <div className="avoid-break">
+                            <p contentEditable suppressContentEditableWarning className="leading-relaxed outline-none focus:bg-indigo-50/50">
+                              {coverData?.closingSentence || "I welcome the opportunity to discuss my application further in an interview and look forward to hearing from you."}
+                            </p>
+                          </div>
+
+                          {/* Sign-off */}
+                          <div className="pt-3 avoid-break">
+                            <p contentEditable suppressContentEditableWarning className="outline-none focus:bg-indigo-50/50">
+                              {coverData?.signoff || "Yours sincerely,"}
+                            </p>
+                            <p
+                              contentEditable
+                              suppressContentEditableWarning
+                              className="font-bold text-black pt-4 outline-none focus:bg-indigo-50/50"
+                            >
+                              {resumeData?.name || "Candidate Name"}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* MODERN CONVERSATIONAL COVER LETTER */}
+                      {coverTemplate === "modern" && (
+                        <div
+                          contentEditable
+                          suppressContentEditableWarning
+                          className="outline-none focus:bg-indigo-50/50 p-2 rounded whitespace-pre-line text-sm leading-relaxed"
+                        >
+                          {generatedCover}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
