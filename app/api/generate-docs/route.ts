@@ -74,7 +74,7 @@ function cleanAndParseJSON<T = any>(rawText: string): T {
 }
 
 async function callGeminiWithFallback(ai: GoogleGenAI, contents: string, config: any) {
-  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-3.5-flash"];
+  const models = ["gemini-2.5-flash", "gemini-2.0-flash"];
   let lastError: any = null;
 
   for (const model of models) {
@@ -155,7 +155,7 @@ Generate the Meta-Architect Brief.`;
     const pass1Config = {
       systemInstruction: pass1Instruction,
       temperature: 0.2,
-      maxOutputTokens: 1000,
+      maxOutputTokens: 4000,
       thinkingConfig: { thinkingBudget: 0 },
     };
 
@@ -196,7 +196,7 @@ Write the humanized 3-paragraph formal cover letter JSON now.`;
         systemInstruction: pass2CoverInstruction,
         responseMimeType: "application/json",
         temperature: 0.2,
-        maxOutputTokens: 2000,
+        maxOutputTokens: 4000,
         thinkingConfig: { thinkingBudget: 0 },
         responseSchema: {
           type: Type.OBJECT,

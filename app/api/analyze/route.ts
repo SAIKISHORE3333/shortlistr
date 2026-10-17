@@ -74,7 +74,7 @@ function cleanAndParseJSON<T = any>(rawText: string): T {
 }
 
 async function callGeminiWithFallback(ai: GoogleGenAI, contents: string, config: any) {
-  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-3.5-flash"];
+  const models = ["gemini-2.5-flash", "gemini-2.0-flash"];
   let lastError: any = null;
 
   for (const model of models) {
@@ -149,7 +149,7 @@ Extract the matched and missing hard/soft skills, experience alignment, educatio
       systemInstruction,
       responseMimeType: "application/json",
       temperature: 0.1,
-      maxOutputTokens: 1000,
+      maxOutputTokens: 4000,
       thinkingConfig: { thinkingBudget: 0 },
       responseSchema: {
         type: Type.OBJECT,
