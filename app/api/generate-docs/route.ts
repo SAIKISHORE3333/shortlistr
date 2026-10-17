@@ -74,7 +74,7 @@ function cleanAndParseJSON<T = any>(rawText: string): T {
 }
 
 async function callGeminiWithFallback(ai: GoogleGenAI, contents: string, config: any) {
-  const models = ["gemini-2.5-flash", "gemini-2.0-flash"];
+  const models = ["gemini-3.8-flash"];
   let lastError: any = null;
 
   for (const model of models) {
