@@ -3,6 +3,76 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 export const maxDuration = 60;
 
+function cleanAndParseJSON<T = any>(rawText: string): T {
+  if (!rawText) throw new Error("Empty response from AI engine");
+
+  let cleaned = rawText.trim();
+
+  // Strip markdown code fences if present
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, "");
+    cleaned = cleaned.replace(/\n?```\s*$/i, "");
+    cleaned = cleaned.trim();
+  }
+
+  // Extract JSON object substring
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+  }
+
+  // First attempt standard JSON.parse
+  try {
+    return JSON.parse(cleaned);
+  } catch (err: any) {
+    // Attempt structural repair for unclosed quotes, brackets, or braces
+    try {
+      let repaired = cleaned;
+      let inString = false;
+      let escaped = false;
+      const stack: string[] = [];
+
+      for (let i = 0; i < repaired.length; i++) {
+        const char = repaired[i];
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (char === "\\") {
+          escaped = true;
+          continue;
+        }
+        if (char === '"') {
+          inString = !inString;
+          continue;
+        }
+        if (!inString) {
+          if (char === "[") stack.push("]");
+          else if (char === "{") stack.push("}");
+          else if (char === "]" || char === "}") {
+            if (stack.length > 0 && stack[stack.length - 1] === char) {
+              stack.pop();
+            }
+          }
+        }
+      }
+
+      if (inString) repaired += '"';
+      while (stack.length > 0) {
+        repaired += stack.pop();
+      }
+
+      return JSON.parse(repaired);
+    } catch {
+      throw new Error(
+        `Failed to parse model output as JSON: ${err?.message || "Invalid JSON structure"}`
+      );
+    }
+  }
+}
+
 async function callGeminiWithFallback(ai: GoogleGenAI, contents: string, config: any) {
   const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-3.5-flash"];
   let lastError: any = null;
@@ -140,7 +210,7 @@ Extract the matched and missing hard/soft skills, experience alignment, educatio
     const response = await callGeminiWithFallback(ai, userPrompt, config);
 
     const outputText = response.text || "{}";
-    const parsed = JSON.parse(outputText);
+    const parsed = cleanAndParseJSON(outputText);
 
     const matchedHardSkills: string[] = Array.isArray(parsed.matchedHardSkills)
       ? parsed.matchedHardSkills

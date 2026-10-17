@@ -204,6 +204,7 @@ export default function ShortlistrPortal() {
     }
 
     setDocError(null);
+    setError(null);
     if (docType === "cv") setGeneratingCv(true);
     if (docType === "cover") setGeneratingCover(true);
 
@@ -214,32 +215,36 @@ export default function ShortlistrPortal() {
         body: JSON.stringify({ resumeText, jobDescription, docType }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || `Failed to generate ${docType.toUpperCase()}`);
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        throw new Error(
+          data?.error || `Document generation service returned status ${res.status}. Please retry.`
+        );
       }
 
       if (docType === "cv") {
-        setGeneratedCv(data.content || "");
-        if (data.resumeData) {
-          setResumeData(data.resumeData);
-        } else {
-          // Fallback basic structure if markdown only
-          setResumeData({
-            name: "Candidate",
-            contactInfo: "Email | Phone | Location",
-            summary: "Tailored Professional Summary",
-            skills: [],
-            experience: [],
-            education: [],
-            markdown: data.content,
-          });
+        const rData: ResumeData = data.resumeData || {
+          name: data.name || "Candidate",
+          contactInfo: data.contact || data.contactInfo || "",
+          summary: data.summary || "",
+          skills: data.skills || [],
+          experience: data.experience || [],
+          education: data.education || [],
+          markdown: data.content || "",
+        };
+        if (!rData.contactInfo && (rData as any).contact) {
+          rData.contactInfo = (rData as any).contact;
         }
+        setResumeData(rData);
+        setGeneratedCv(data.content || rData.markdown || "");
       } else {
-        setGeneratedCover(data.content || data.coverLetter || "");
+        const coverText = data.coverLetter || data.content || "";
+        setGeneratedCover(coverText);
       }
     } catch (err: any) {
-      setDocError(err?.message || `Failed to generate ${docType.toUpperCase()}`);
+      setDocError(
+        err?.message || `Failed to generate ${docType.toUpperCase()}. Please click Retry.`
+      );
     } finally {
       if (docType === "cv") setGeneratingCv(false);
       if (docType === "cover") setGeneratingCover(false);
@@ -516,9 +521,20 @@ export default function ShortlistrPortal() {
           <div className="flex-1 p-5 sm:p-6 overflow-y-auto max-h-[860px] print:p-0 print:m-0 print:max-h-none print:overflow-visible">
             {/* Document Error Banner (Hidden in Print) */}
             {docError && (
-              <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2 print:hidden">
-                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span>{docError}</span>
+              <div className="mb-4 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between gap-3 print:hidden shadow-sm">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{docError}</span>
+                </div>
+                <button
+                  onClick={() => handleGenerateDoc(activeTab === "cv" ? "cv" : "cover")}
+                  disabled={generatingCv || generatingCover}
+                  type="button"
+                  className="px-3 py-1 rounded-md bg-rose-600/30 hover:bg-rose-600/50 text-rose-200 border border-rose-500/40 font-medium transition cursor-pointer text-xs shrink-0 flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${generatingCv || generatingCover ? "animate-spin" : ""}`} />
+                  <span>Retry</span>
+                </button>
               </div>
             )}
 

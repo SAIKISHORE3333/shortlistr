@@ -3,6 +3,76 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 export const maxDuration = 60;
 
+function cleanAndParseJSON<T = any>(rawText: string): T {
+  if (!rawText) throw new Error("Empty response from AI engine");
+
+  let cleaned = rawText.trim();
+
+  // Strip markdown code fences if present
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, "");
+    cleaned = cleaned.replace(/\n?```\s*$/i, "");
+    cleaned = cleaned.trim();
+  }
+
+  // Extract JSON object substring
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+  }
+
+  // First attempt standard JSON.parse
+  try {
+    return JSON.parse(cleaned);
+  } catch (err: any) {
+    // Attempt structural repair for unclosed quotes, brackets, or braces
+    try {
+      let repaired = cleaned;
+      let inString = false;
+      let escaped = false;
+      const stack: string[] = [];
+
+      for (let i = 0; i < repaired.length; i++) {
+        const char = repaired[i];
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (char === "\\") {
+          escaped = true;
+          continue;
+        }
+        if (char === '"') {
+          inString = !inString;
+          continue;
+        }
+        if (!inString) {
+          if (char === "[") stack.push("]");
+          else if (char === "{") stack.push("}");
+          else if (char === "]" || char === "}") {
+            if (stack.length > 0 && stack[stack.length - 1] === char) {
+              stack.pop();
+            }
+          }
+        }
+      }
+
+      if (inString) repaired += '"';
+      while (stack.length > 0) {
+        repaired += stack.pop();
+      }
+
+      return JSON.parse(repaired);
+    } catch {
+      throw new Error(
+        `Failed to parse model output as JSON: ${err?.message || "Invalid JSON structure"}`
+      );
+    }
+  }
+}
+
 async function callGeminiWithFallback(ai: GoogleGenAI, contents: string, config: any) {
   const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-3.5-flash"];
   let lastError: any = null;
@@ -83,7 +153,7 @@ Generate the Meta-Architect Brief.`;
 
     const pass1Config = {
       systemInstruction: pass1Instruction,
-      temperature: 0.1,
+      temperature: 0.2,
       maxOutputTokens: 1000,
       thinkingConfig: { thinkingBudget: 0 },
     };
@@ -116,21 +186,21 @@ ${resumeText}
 === TARGET JOB DESCRIPTION ===
 ${jobDescription}
 
-Write the humanized 3-paragraph cover letter now (under 250 words, maximum burstiness, zero banned clichés). Output only the letter.`;
+Write the humanized 3-paragraph cover letter now (under 250 words, maximum burstiness, zero banned clichés). Output only the raw letter text.`;
 
       const pass2CoverConfig = {
         systemInstruction: pass2CoverInstruction,
-        temperature: 0.1,
-        maxOutputTokens: 1000,
+        temperature: 0.2,
+        maxOutputTokens: 2000,
         thinkingConfig: { thinkingBudget: 0 },
       };
 
       const pass2Response = await callGeminiWithFallback(ai, pass2CoverPrompt, pass2CoverConfig);
-      const letterContent = pass2Response.text || "";
+      const letterContent = (pass2Response.text || "").trim();
 
       return NextResponse.json({
-        content: letterContent,
         coverLetter: letterContent,
+        content: letterContent,
         architectBrief,
         docType: "cover",
       });
@@ -147,7 +217,7 @@ Using the Candidate Resume, Target Job Description, and Meta-Architect Brief, co
 4. Banned buzzwords: "spearheaded", "synergy", "dynamic", "delve", "harnessing", "proven track record", "passionate".
 
 === STRUCTURED OUTPUT FORMAT ===
-Produce structured JSON conforming to the requested schema. Group technical skills logically (e.g., Languages, Frameworks, Cloud & Data, Developer Tools).`;
+Produce structured JSON conforming to the requested schema. Group technical skills logically (e.g., Languages, Frameworks, Cloud & Data, Developer Tools). Output complete, unclipped JSON.`;
 
     const pass2CvPrompt = `=== META-ARCHITECT BRIEF ===
 ${architectBrief}
@@ -158,19 +228,19 @@ ${resumeText}
 === TARGET JOB DESCRIPTION ===
 ${jobDescription}
 
-Generate the structured tailored resume JSON.`;
+Generate the structured tailored resume JSON. Ensure full closure of all arrays and strings.`;
 
     const pass2CvConfig = {
       systemInstruction: pass2CvInstruction,
       responseMimeType: "application/json",
-      temperature: 0.1,
-      maxOutputTokens: 1000,
+      temperature: 0.2,
+      maxOutputTokens: 4000,
       thinkingConfig: { thinkingBudget: 0 },
       responseSchema: {
         type: Type.OBJECT,
         properties: {
           name: { type: Type.STRING, description: "Candidate's full name" },
-          contactInfo: {
+          contact: {
             type: Type.STRING,
             description: "Location, email, phone, and profile links formatted on one line",
           },
@@ -226,23 +296,55 @@ Generate the structured tailored resume JSON.`;
             description: "Full clean markdown representation of the tailored resume",
           },
         },
-        required: ["name", "contactInfo", "summary", "skills", "experience", "education", "markdown"],
+        required: ["name", "contact", "summary", "skills", "experience", "education", "markdown"],
       },
     };
 
     const pass2CvResponse = await callGeminiWithFallback(ai, pass2CvPrompt, pass2CvConfig);
-    const parsedResume = JSON.parse(pass2CvResponse.text || "{}");
+    const rawText = pass2CvResponse.text || "{}";
+
+    let parsedResume: any;
+    try {
+      parsedResume = cleanAndParseJSON(rawText);
+    } catch (parseError: any) {
+      console.error("JSON parse failure in cv generation:", parseError?.message, rawText.slice(0, 300));
+      return NextResponse.json(
+        {
+          error: "Failed to parse structured resume response. Please retry generation.",
+          details: parseError?.message,
+        },
+        { status: 500 }
+      );
+    }
+
+    // Normalize contact / contactInfo for both formats
+    const normalizedResume = {
+      name: parsedResume.name || "Candidate",
+      contact: parsedResume.contact || parsedResume.contactInfo || "",
+      contactInfo: parsedResume.contact || parsedResume.contactInfo || "",
+      summary: parsedResume.summary || "",
+      skills: Array.isArray(parsedResume.skills) ? parsedResume.skills : [],
+      experience: Array.isArray(parsedResume.experience) ? parsedResume.experience : [],
+      education: Array.isArray(parsedResume.education) ? parsedResume.education : [],
+      markdown: parsedResume.markdown || "",
+    };
 
     return NextResponse.json({
-      content: parsedResume.markdown || "",
-      resumeData: parsedResume,
+      content: normalizedResume.markdown,
+      resumeData: normalizedResume,
+      name: normalizedResume.name,
+      contact: normalizedResume.contact,
+      summary: normalizedResume.summary,
+      skills: normalizedResume.skills,
+      experience: normalizedResume.experience,
+      education: normalizedResume.education,
       architectBrief,
       docType: "cv",
     });
   } catch (err: any) {
     console.error("API Error in /api/generate-docs:", err);
     return NextResponse.json(
-      { error: err?.message || "Failed to generate document." },
+      { error: err?.message || "Failed to generate document. Please retry." },
       { status: 500 }
     );
   }
