@@ -4,7 +4,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 export const maxDuration = 60;
 
 async function callGeminiWithFallback(ai: GoogleGenAI, contents: string, config: any) {
-  const models = ["gemini-2.5-flash", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"];
+  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-3.5-flash"];
   let lastError: any = null;
 
   for (const model of models) {

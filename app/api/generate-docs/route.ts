@@ -4,7 +4,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 export const maxDuration = 60;
 
 async function callGeminiWithFallback(ai: GoogleGenAI, contents: string, config: any) {
-  const models = ["gemini-2.5-flash", "gemini-3.8-flash", "gemini-3.5-flash", "gemini-flash-latest"];
+  const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-3.5-flash"];
   let lastError: any = null;
 
   for (const model of models) {
@@ -83,7 +83,8 @@ Generate the Meta-Architect Brief.`;
 
     const pass1Config = {
       systemInstruction: pass1Instruction,
-      temperature: 0.2,
+      temperature: 0.1,
+      maxOutputTokens: 1000,
       thinkingConfig: { thinkingBudget: 0 },
     };
 
@@ -119,7 +120,8 @@ Write the humanized 3-paragraph cover letter now (under 250 words, maximum burst
 
       const pass2CoverConfig = {
         systemInstruction: pass2CoverInstruction,
-        temperature: 0.3,
+        temperature: 0.1,
+        maxOutputTokens: 1000,
         thinkingConfig: { thinkingBudget: 0 },
       };
 
@@ -162,6 +164,7 @@ Generate the structured tailored resume JSON.`;
       systemInstruction: pass2CvInstruction,
       responseMimeType: "application/json",
       temperature: 0.1,
+      maxOutputTokens: 1000,
       thinkingConfig: { thinkingBudget: 0 },
       responseSchema: {
         type: Type.OBJECT,
